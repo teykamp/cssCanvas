@@ -10,6 +10,17 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, defineProps } from 'vue'
 
+interface Shape {
+  type: string
+  left: number
+  top: number
+  width: number
+  height: number
+  backgroundColor: string
+  draggable: boolean
+  children: Shape[]
+}
+
 const props = defineProps<{
   width?: number
   height?: number
@@ -20,24 +31,55 @@ const height = props.height ?? 600
 
 const slotContainer = ref<HTMLElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
-let shapes = ref<any[]>([])
+let shapes = ref<Shape[]>([])
 let dragging = ref(false)
-let currentShapeIndex = ref<number | null>(null)
+let currentShape: Shape | null = null
 let offsetX = ref(0)
 let offsetY = ref(0)
 
-const getCssProperties = (element: Element) => {
+const inferShapeType = (styles: CSSStyleDeclaration): string => {
+  if (parseInt(styles.borderRadius) > 0 || styles.borderRadius === '50%') {
+    return 'circle'
+  }
+  return 'rectangle'
+}
+
+const getCssProperties = (element: Element): Shape => {
   const styles = window.getComputedStyle(element)
+  const type = inferShapeType(styles)
   return {
-    type: element.getAttribute('data-shape'),
+    type,
     left: parseInt(styles.left) || 0,
     top: parseInt(styles.top) || 0,
     width: parseInt(styles.width) || 50,
     height: parseInt(styles.height) || 50,
     backgroundColor: styles.backgroundColor || '#000',
-    borderRadius: parseInt(styles.borderRadius) || 0,
-    draggable: element.classList.contains('draggable')
+    draggable: element.classList.contains('draggable'),
+    children: []
   }
+}
+
+const extractShapes = (element: Element): Shape => {
+  const shape = getCssProperties(element)
+  Array.from(element.children).forEach(child => {
+    shape.children.push(extractShapes(child))
+  })
+  return shape
+}
+
+const drawShape = (ctx: CanvasRenderingContext2D, shape: Shape) => {
+  ctx.fillStyle = shape.backgroundColor
+  if (shape.type === 'circle') {
+    const radius = shape.width / 2
+    ctx.beginPath()
+    ctx.arc(shape.left + radius, shape.top + radius, radius, 0, 2 * Math.PI)
+    ctx.fill()
+  } else {
+    ctx.fillRect(shape.left, shape.top, shape.width, shape.height)
+  }
+  shape.children.forEach(child => {
+    drawShape(ctx, { ...child, left: shape.left + child.left, top: shape.top + child.top })
+  })
 }
 
 const drawShapes = () => {
@@ -45,22 +87,11 @@ const drawShapes = () => {
   const ctx = canvas.value.getContext('2d')
   if (!ctx) return
   ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
-
-  shapes.value.forEach(shape => {
-    ctx.fillStyle = shape.backgroundColor
-    if (shape.type === 'circle' || shape.borderRadius > 0) {
-      const radius = shape.width / 2
-      ctx.beginPath()
-      ctx.arc(shape.left + radius, shape.top + radius, radius, 0, 2 * Math.PI)
-      ctx.fill()
-    } else {
-      ctx.fillRect(shape.left, shape.top, shape.width, shape.height)
-    }
-  })
+  shapes.value.forEach(shape => drawShape(ctx, shape))
 }
 
-const isMouseOverShape = (x: number, y: number, shape: any) => {
-  if (shape.type === 'circle' || shape.borderRadius > 0) {
+const isMouseOverShape = (x: number, y: number, shape: Shape) => {
+  if (shape.type === 'circle') {
     const radius = shape.width / 2
     const centerX = shape.left + radius
     const centerY = shape.top + radius
@@ -70,45 +101,62 @@ const isMouseOverShape = (x: number, y: number, shape: any) => {
   }
 }
 
+const findShapeAtPosition = (x: number, y: number, shapes: Shape[]): Shape | null => {
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const shape = shapes[i]
+    if (isMouseOverShape(x, y, shape)) {
+      return shape
+    }
+    const childShape = findShapeAtPosition(x - shape.left, y - shape.top, shape.children)
+    if (childShape) {
+      return childShape
+    }
+  }
+  return null
+}
+
 const handleMouseDown = (event: MouseEvent) => {
   const rect = canvas.value?.getBoundingClientRect()
   if (!rect) return
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top
 
-  for (let i = 0; i < shapes.value.length; i++) {
-    if (shapes.value[i].draggable && isMouseOverShape(x, y, shapes.value[i])) {
-      dragging.value = true
-      currentShapeIndex.value = i
-      offsetX.value = x - shapes.value[i].left
-      offsetY.value = y - shapes.value[i].top
-      return
-    }
+  currentShape = findShapeAtPosition(x, y, shapes.value)
+  if (currentShape?.draggable) {
+    dragging.value = true
+    offsetX.value = x - currentShape.left
+    offsetY.value = y - currentShape.top
   }
 }
 
+const moveShape = (shape: Shape, dx: number = 0, dy: number = 0) => {
+  shape.left += dx
+  shape.top += dy
+  shape.children.forEach(child => moveShape(child))
+}
+
 const handleMouseMove = (event: MouseEvent) => {
-  if (!dragging.value) return
+  if (!dragging.value || !currentShape) return
   const rect = canvas.value?.getBoundingClientRect()
   if (!rect) return
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top
 
-  if (currentShapeIndex.value !== null) {
-    shapes.value[currentShapeIndex.value].left = x - offsetX.value
-    shapes.value[currentShapeIndex.value].top = y - offsetY.value
-    drawShapes()
-  }
+  const dx = x - offsetX.value - currentShape.left
+  const dy = y - offsetY.value - currentShape.top
+
+  moveShape(currentShape, dx, dy)
+  drawShapes()
 }
 
 const handleMouseUp = () => {
   dragging.value = false
-  currentShapeIndex.value = null
+  currentShape = null
 }
 
 onMounted(() => {
   if (!slotContainer.value) return
-  shapes.value = Array.from(slotContainer.value.children).map(getCssProperties)
+  shapes.value = Array.from(slotContainer.value.children).map(extractShapes)
   drawShapes()
 
   if (canvas.value) {

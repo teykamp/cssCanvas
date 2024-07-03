@@ -60,16 +60,27 @@ const drawElement = (ctx: CanvasRenderingContext2D, elementInfo: ElementInfo) =>
 
   ctx.fillStyle = backgroundColor
 
-  if (borderRadius * 2 >= Math.min(rect.width, rect.height)) {
-    const radius = Math.min(rect.width, rect.height) / 2
+  const width = parseFloat(styles.width) - 2 * borderWidth
+  const height = parseFloat(styles.height) - 2 * borderWidth
+  const minRadius = Math.min(width, height) / 2
+  const isCircle = borderRadius >= minRadius
+
+  if (isCircle) {
+    const radius = (rect.width - borderWidth) / 2
+    const centerX = rect.left + radius + borderWidth / 2
+    const centerY = rect.top + radius + borderWidth / 2
+
     ctx.beginPath()
-    ctx.arc(rect.left + radius, rect.top + radius, radius, 0, 2 * Math.PI)
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
     ctx.closePath()
     ctx.fill()
 
     if (borderWidth > 0) {
       ctx.strokeStyle = borderColor
       ctx.lineWidth = borderWidth
+      ctx.beginPath()
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
+      ctx.closePath()
       ctx.stroke()
     }
   } else {
@@ -98,11 +109,7 @@ const drawOnCanvas = () => {
 }
 
 onMounted(async () => {
-  await nextTick() // Wait for the next DOM update cycle to ensure slot elements are rendered
+  await nextTick()
   drawOnCanvas()
 })
 </script>
-
-<style scoped>
-/* Add any necessary styling here */
-</style>

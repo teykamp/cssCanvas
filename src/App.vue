@@ -7,9 +7,8 @@
           </div>
         </div>
         <div
-          style="left: 200px; top: 200px; width: 100px; height: 100px; background-color: blue; border-radius: 50%; cursor: pointer; position: absolute;  border: 5px solid red;">
+          style="left: 200px; top: 200px; width: 100px; height: 100px; background-color: blue; border-radius: 50%; cursor: pointer; position: absolute;  border: 5px dotted red;">
         </div>
-        <button style="width: 40px; height: 10vh; background-color: purple;"></button>
       </div>
     </CssCanvas>
   </div>

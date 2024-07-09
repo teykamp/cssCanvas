@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -19,26 +19,37 @@ const { width, height } = {
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   const convertToAscii = (brightness: number) => {
-    if (brightness > 200) return '█'
-    if (brightness > 100) return '▓'
-    if (brightness > 50) return '▒'
-    if (brightness > 25) return '░'
+    if (brightness > 220) return '█'
+    if (brightness > 160) return '▓'
+    if (brightness > 120) return '#'
+    if (brightness > 100) return 'X'
+    if (brightness > 80) return '▒'
+    if (brightness > 60) return 'C'
+    if (brightness > 40) return '░'
+    return ' '
+  }
+  const convertToEmoji = (brightness: number) => {
+    if (brightness > 220) return '😊'
+    if (brightness > 160) return '😎'
+    if (brightness > 120) return '👀'
+    if (brightness > 100) return '🎶'
+    if (brightness > 80) return '🙌'
+    if (brightness > 60) return '👌'
+    if (brightness > 40) return '✔'
     return ' '
   }
 
   const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-  const imageCellArray = []
   for (let y = 0; y < pixels.height; y += cellSize) {
     for (let x = 0; x < pixels.width; x += cellSize) {
       const pixelPosition = 4 * (pixels.width * y + x)
       if (pixels.data[pixelPosition + 3] > 50) {
         const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
         const brightness = (red + green + blue) / 3
-        const symbol = convertToAscii(brightness)
-        const color = `rgb(${red}, ${green}, ${blue})`
-        imageCellArray.push({ x, y, symbol, color })
-        ctx.font = cellSize + 'px monospace'
+        const symbol = convertToEmoji(brightness)
+        const color = `rgba(${red + 20}, ${green + 20}, ${blue + 20}, 1)`
+        ctx.font = cellSize + 'px Times New Roman'
         ctx.fillStyle = 'rgba(200, 200, 200, 0.1)'
         ctx.fillText(symbol, x + 1, y + 1)
         ctx.fillStyle = color
@@ -54,7 +65,7 @@ const renderHtmlToCanvas = (
   imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
   effectArgs: any[]
 ) => {
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
   const svg = `
@@ -65,46 +76,55 @@ const renderHtmlToCanvas = (
     </svg>
   `
 
-  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
-  const svgObjectUrl = URL.createObjectURL(svgBlob)
+  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}` // avoid cors
 
   const tempImg = new Image()
   tempImg.addEventListener('load', function () {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(tempImg, 0, 0)
-    URL.revokeObjectURL(svgObjectUrl)
 
     imageEffect(ctx, ...effectArgs)
   })
 
-  tempImg.src = svgObjectUrl
+  tempImg.src = encodedSvg
 }
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
-    renderHtmlToCanvas(canvas.value, html, asciiize, [5])
+    renderHtmlToCanvas(canvas.value, html, asciiize, [15])
   }
 }
+
+// Throttle function to limit the rate of canvas updates
+const throttle = (func: Function, limit: number) => {
+  let inThrottle: boolean
+  return function (...args: any[]) {
+    if (!inThrottle) {
+      func(...args)
+      inThrottle = true
+      setTimeout(() => (inThrottle = false), limit)
+    }
+  }
+}
+
+const throttledUpdateCanvas = throttle(updateCanvas, 0)
 
 onMounted(async () => {
   await nextTick()
   updateCanvas()
 
-  slotContainer.value?.addEventListener('mouseenter', updateCanvas)
-  slotContainer.value?.addEventListener('mouseleave', updateCanvas)
-  slotContainer.value?.addEventListener('click', updateCanvas)
-})
-
-onBeforeUnmount(() => {
   if (slotContainer.value) {
-    slotContainer.value.removeEventListener('mouseenter', updateCanvas)
-    slotContainer.value.removeEventListener('mouseleave', updateCanvas)
-    slotContainer.value.removeEventListener('click', updateCanvas)
+    const observer = new MutationObserver(throttledUpdateCanvas)
+    observer.observe(slotContainer.value, { childList: true, subtree: true, attributes: true })
+
+    slotContainer.value.__observer = observer
   }
 })
 
-watch(() => slotContainer.value?.innerHTML, () => {
-  updateCanvas()
+onBeforeUnmount(() => {
+  if (slotContainer.value?.__observer) {
+    slotContainer.value.__observer.disconnect()
+  }
 })
 </script>

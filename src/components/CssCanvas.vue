@@ -7,17 +7,55 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 
-const slotContainer = ref(null)
-const canvas = ref(null)
-const width = 800
-const height = 600
-let observer = null
+const slotContainer = ref<HTMLDivElement | null>(null)
+const canvas = ref<HTMLCanvasElement | null>(null)
+const { width, height } = {
+  width: window.innerWidth - 20,
+  height: window.innerHeight - 20
+}
 
-const renderHtmlToCanvas = (canvas, html) => {
+const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
+  const convertToAscii = (brightness: number) => {
+    if (brightness > 200) return '█'
+    if (brightness > 100) return '▓'
+    if (brightness > 50) return '▒'
+    if (brightness > 25) return '░'
+    return ' '
+  }
+
+  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  const imageCellArray = []
+  for (let y = 0; y < pixels.height; y += cellSize) {
+    for (let x = 0; x < pixels.width; x += cellSize) {
+      const pixelPosition = 4 * (pixels.width * y + x)
+      if (pixels.data[pixelPosition + 3] > 50) {
+        const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
+        const brightness = (red + green + blue) / 3
+        const symbol = convertToAscii(brightness)
+        const color = `rgb(${red}, ${green}, ${blue})`
+        imageCellArray.push({ x, y, symbol, color })
+        ctx.font = cellSize + 'px monospace'
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.1)'
+        ctx.fillText(symbol, x + 1, y + 1)
+        ctx.fillStyle = color
+        ctx.fillText(symbol, x, y)
+      }
+    }
+  }
+}
+
+const renderHtmlToCanvas = (
+  canvas: HTMLCanvasElement,
+  html: string,
+  imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
+  effectArgs: any[]
+) => {
   const ctx = canvas.getContext('2d')
+  if (!ctx) return
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
@@ -32,9 +70,11 @@ const renderHtmlToCanvas = (canvas, html) => {
 
   const tempImg = new Image()
   tempImg.addEventListener('load', function () {
-    ctx.clearRect(0, 0, canvas.width, canvas.height) // Clear the canvas before drawing
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(tempImg, 0, 0)
     URL.revokeObjectURL(svgObjectUrl)
+
+    imageEffect(ctx, ...effectArgs)
   })
 
   tempImg.src = svgObjectUrl
@@ -43,7 +83,7 @@ const renderHtmlToCanvas = (canvas, html) => {
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
-    renderHtmlToCanvas(canvas.value, html)
+    renderHtmlToCanvas(canvas.value, html, asciiize, [5])
   }
 }
 
@@ -51,29 +91,20 @@ onMounted(async () => {
   await nextTick()
   updateCanvas()
 
-  // Set up a MutationObserver to watch for changes in the slot content
-  observer = new MutationObserver(updateCanvas)
-  if (slotContainer.value) {
-    observer.observe(slotContainer.value, { childList: true, subtree: true, characterData: true })
-  }
-
-  // Add event listeners for hover and click events
-  slotContainer.value.addEventListener('mouseenter', updateCanvas)
-  slotContainer.value.addEventListener('mouseleave', updateCanvas)
-  slotContainer.value.addEventListener('click', updateCanvas)
+  slotContainer.value?.addEventListener('mouseenter', updateCanvas)
+  slotContainer.value?.addEventListener('mouseleave', updateCanvas)
+  slotContainer.value?.addEventListener('click', updateCanvas)
 })
 
 onBeforeUnmount(() => {
-  // Disconnect the MutationObserver when the component is unmounted
-  if (observer) {
-    observer.disconnect()
-  }
-
-  // Remove event listeners
   if (slotContainer.value) {
     slotContainer.value.removeEventListener('mouseenter', updateCanvas)
     slotContainer.value.removeEventListener('mouseleave', updateCanvas)
     slotContainer.value.removeEventListener('click', updateCanvas)
   }
+})
+
+watch(() => slotContainer.value?.innerHTML, () => {
+  updateCanvas()
 })
 </script>

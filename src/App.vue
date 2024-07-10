@@ -2,14 +2,15 @@
   <div>
     <CssCanvas>
       <div style="display: flex;">
-        <div style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute;">
+        <!-- <div style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute;">
           <div style="width: 10px; height: 10px; background-color: aqua; left: 500px; top: 50px; position: absolute;">
           </div>
+        </div> -->
+        <div
+          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: lightcoral; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large;">
+          THISASDFGHJKL
         </div>
-        <div class="draggable" @mousedown="onMouseDown" ref="draggableDiv"
-          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: lightcoral; border-radius: 50%; cursor: pointer; position: absolute; border: 25px solid red; background-image: linear-gradient(purple, white)">
-        </div>
-        <button :style="style" @click="style.backgroundColor = 'green'">hi</button>
+        <!-- <button :style="style" @click="style.backgroundColor = style.backgroundColor === 'red' ? 'blue' : 'red'">hi</button> -->
       </div>
     </CssCanvas>
   </div>
@@ -17,7 +18,7 @@
 
 <script setup lang="ts">
 import CssCanvas from '@/components/CssCanvas.vue'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 
 const style = ref({
   backgroundColor: 'red',
@@ -25,48 +26,41 @@ const style = ref({
   height: '100px',
 })
 
-const draggableDiv = ref<HTMLElement | null>(null)
-let isDragging = false
-let offsetX = 0
-let offsetY = 0
-
-const onMouseDown = (event: MouseEvent) => {
-  isDragging = true
-  offsetX = event.clientX - (draggableDiv.value?.offsetLeft ?? 0)
-  offsetY = event.clientY - (draggableDiv.value?.offsetTop ?? 0)
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-}
-
-const onMouseMove = (event: MouseEvent) => {
-  if (isDragging && draggableDiv.value) {
-    const x = event.clientX - offsetX
-    const y = event.clientY - offsetY
-    draggableDiv.value.style.left = `${x}px`
-    draggableDiv.value.style.top = `${y}px`
-  }
-}
-
-const onMouseUp = () => {
-  isDragging = false
-  document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', onMouseUp)
-}
-
-onMounted(() => {
-  if (draggableDiv.value) {
-    draggableDiv.value.style.position = 'absolute'
-  }
-})
-
-onUnmounted(() => {
-  document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', onMouseUp)
-})
 </script>
 
-<style scoped>
-.draggable {
-  cursor: move;
+<style>
+.slidecontainer {
+  width: 100%;
+}
+
+.slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 25px;
+  background: #d3d3d3;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: .2s;
+  transition: opacity .2s;
+}
+
+.slider:hover {
+  opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  background: #04AA6D;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  background: #04AA6D;
+  cursor: pointer;
 }
 </style>

@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -33,7 +33,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
     if (brightness > 160) return '😎'
     if (brightness > 120) return '👀'
     if (brightness > 100) return '🎶'
-    if (brightness > 80) return '🙌'
+    if (brightness > 80) return '❤'
     if (brightness > 60) return '👌'
     if (brightness > 40) return '✔'
     return ' '
@@ -41,6 +41,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
 
   const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  const imageCellArray = []
   for (let y = 0; y < pixels.height; y += cellSize) {
     for (let x = 0; x < pixels.width; x += cellSize) {
       const pixelPosition = 4 * (pixels.width * y + x)
@@ -48,8 +49,9 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
         const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
         const brightness = (red + green + blue) / 3
         const symbol = convertToEmoji(brightness)
-        const color = `rgba(${red + 20}, ${green + 20}, ${blue + 20}, 1)`
-        ctx.font = cellSize + 'px Times New Roman'
+        const color = `rgb(${red}, ${green}, ${blue})`
+        imageCellArray.push({ x, y, symbol, color })
+        ctx.font = cellSize + 'px monospace'
         ctx.fillStyle = 'rgba(200, 200, 200, 0.1)'
         ctx.fillText(symbol, x + 1, y + 1)
         ctx.fillStyle = color
@@ -65,7 +67,7 @@ const renderHtmlToCanvas = (
   imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
   effectArgs: any[]
 ) => {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
 
   const svg = `
@@ -92,39 +94,30 @@ const renderHtmlToCanvas = (
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
-    renderHtmlToCanvas(canvas.value, html, asciiize, [15])
+    renderHtmlToCanvas(canvas.value, html, asciiize, [10])
   }
 }
-
-// Throttle function to limit the rate of canvas updates
-const throttle = (func: Function, limit: number) => {
-  let inThrottle: boolean
-  return function (...args: any[]) {
-    if (!inThrottle) {
-      func(...args)
-      inThrottle = true
-      setTimeout(() => (inThrottle = false), limit)
-    }
-  }
-}
-
-const throttledUpdateCanvas = throttle(updateCanvas, 0)
 
 onMounted(async () => {
   await nextTick()
   updateCanvas()
 
-  if (slotContainer.value) {
-    const observer = new MutationObserver(throttledUpdateCanvas)
-    observer.observe(slotContainer.value, { childList: true, subtree: true, attributes: true })
-
-    slotContainer.value.__observer = observer
-  }
+  slotContainer.value?.addEventListener('mouseenter', updateCanvas)
+  slotContainer.value?.addEventListener('mouseleave', updateCanvas)
+  slotContainer.value?.addEventListener('click', updateCanvas)
 })
 
 onBeforeUnmount(() => {
-  if (slotContainer.value?.__observer) {
-    slotContainer.value.__observer.disconnect()
+  if (slotContainer.value) {
+    slotContainer.value.removeEventListener('mouseenter', updateCanvas)
+    slotContainer.value.removeEventListener('mouseleave', updateCanvas)
+    slotContainer.value.removeEventListener('click', updateCanvas)
+  }
+})
+
+watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    updateCanvas()
   }
 })
 </script>

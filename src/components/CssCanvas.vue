@@ -48,7 +48,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
       if (pixels.data[pixelPosition + 3] > 50) {
         const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
         const brightness = (red + green + blue) / 3
-        const symbol = convertToEmoji(brightness)
+        const symbol = convertToAscii(brightness)
         const color = `rgb(${red}, ${green}, ${blue})`
         imageCellArray.push({ x, y, symbol, color })
         ctx.font = cellSize + 'px monospace'
@@ -80,15 +80,15 @@ const renderHtmlToCanvas = (
 
   const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}` // avoid cors
 
-  const tempImg = new Image()
-  tempImg.addEventListener('load', function () {
+  const htmlImage = new Image()
+  htmlImage.addEventListener('load', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(tempImg, 0, 0)
+    ctx.drawImage(htmlImage, 0, 0)
 
-    imageEffect(ctx, ...effectArgs)
+    // imageEffect(ctx, ...effectArgs)
   })
 
-  tempImg.src = encodedSvg
+  htmlImage.src = encodedSvg
 }
 
 const updateCanvas = () => {

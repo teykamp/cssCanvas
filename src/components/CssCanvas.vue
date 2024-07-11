@@ -40,6 +40,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   }
 
   const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+  console.log(pixels)
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   const imageCellArray = []
   for (let y = 0; y < pixels.height; y += cellSize) {
@@ -61,35 +62,73 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   }
 }
 
-const renderHtmlToCanvas = (
+const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
   imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
   effectArgs: any[]
 ) => {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
 
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const images = doc.querySelectorAll('img');
+  const imageArray = Array.from(images) as HTMLImageElement[];
+
+  const imagePromises: Promise<HTMLImageElement>[] = [];
+
+  // Load and resolve images from the HTML
+  imageArray.forEach((img) => {
+    const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = img.src;
+    });
+
+    imagePromises.push(imgPromise);
+
+    // Remove the image from the HTML content
+    img.parentNode?.removeChild(img);
+  });
+
+  // Render the modified HTML content to the canvas as an SVG
+  const modifiedHtml = doc.body.innerHTML;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
       <foreignObject width="100%" height="100%">
-        <div xmlns="http://www.w3.org/1999/xhtml">${html}</div>
+        <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
       </foreignObject>
     </svg>
-  `
+  `;
 
-  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}` // avoid cors
+  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
 
-  const htmlImage = new Image()
-  htmlImage.addEventListener('load', () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(htmlImage, 0, 0)
+  // Load and resolve the SVG image
+  const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const htmlImage = new Image();
+    htmlImage.onload = () => resolve(htmlImage);
+    htmlImage.onerror = reject;
+    htmlImage.src = encodedSvg;
+  });
+  imagePromises.push(svgPromise);
 
-    // imageEffect(ctx, ...effectArgs)
-  })
+  const loadedImages = await Promise.all(imagePromises);
 
-  htmlImage.src = encodedSvg
-}
+  // Clear the canvas and draw the SVG image
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height);
+
+  // Draw other images separately (you might need to position them accordingly)
+  loadedImages.slice(0, -1).forEach((image) => {
+    ctx.drawImage(image, 0, 0, 500, 500); // Specify x, y, width, and height as needed
+  });
+
+  // Apply the image effect
+  imageEffect(ctx, ...effectArgs);
+};
+
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {

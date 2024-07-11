@@ -49,7 +49,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
       if (pixels.data[pixelPosition + 3] > 50) {
         const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
         const brightness = (red + green + blue) / 3
-        const symbol = convertToAscii(brightness)
+        const symbol = convertToEmoji(brightness)
         const color = `rgb(${red}, ${green}, ${blue})`
         imageCellArray.push({ x, y, symbol, color })
         ctx.font = cellSize + 'px monospace'
@@ -68,64 +68,58 @@ const renderHtmlToCanvas = async (
   imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
   effectArgs: any[]
 ) => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
 
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const images = doc.querySelectorAll('img');
-  const imageArray = Array.from(images) as HTMLImageElement[];
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const images = doc.querySelectorAll('img')
+  const imageArray = Array.from(images) as HTMLImageElement[]
 
-  const imagePromises: Promise<HTMLImageElement>[] = [];
+  const imagePromises: Promise<HTMLImageElement>[] = []
 
-  // Load and resolve images from the HTML
   imageArray.forEach((img) => {
     const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = img.src;
-    });
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = reject
+      image.src = img.src
+    })
 
-    imagePromises.push(imgPromise);
+    imagePromises.push(imgPromise)
 
-    // Remove the image from the HTML content
-    img.parentNode?.removeChild(img);
-  });
+    img.parentNode?.removeChild(img)
+  })
 
-  // Render the modified HTML content to the canvas as an SVG
-  const modifiedHtml = doc.body.innerHTML;
+  const modifiedHtml = doc.body.innerHTML
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
       <foreignObject width="100%" height="100%">
         <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
       </foreignObject>
     </svg>
-  `;
+  `
 
-  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`
 
-  // Load and resolve the SVG image
   const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-    const htmlImage = new Image();
-    htmlImage.onload = () => resolve(htmlImage);
-    htmlImage.onerror = reject;
-    htmlImage.src = encodedSvg;
-  });
-  imagePromises.push(svgPromise);
+    const htmlImage = new Image()
+    htmlImage.onload = () => resolve(htmlImage)
+    htmlImage.onerror = reject
+    htmlImage.src = encodedSvg
+  })
+  imagePromises.push(svgPromise)
 
-  const loadedImages = await Promise.all(imagePromises);
+  const loadedImages = await Promise.all(imagePromises)
 
-  // Clear the canvas and draw the SVG image
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
 
-  // Draw other images separately (you might need to position them accordingly)
   loadedImages.slice(0, -1).forEach((image) => {
-    ctx.drawImage(image, 0, 0, 500, 500); // Specify x, y, width, and height as needed
-  });
+    // get the image width and height before deleting image above
+    ctx.drawImage(image, 0, 0, 500, 500)
+  })
 
-  // Apply the image effect
   imageEffect(ctx, ...effectArgs);
 };
 

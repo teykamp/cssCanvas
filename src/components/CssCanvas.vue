@@ -8,13 +8,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const { width, height } = {
   width: window.innerWidth - 20,
   height: window.innerHeight - 20
+}
+
+type ElementInfo = {
+  rect: DOMRect,
+  styles: CSSStyleDeclaration,
+  children: ElementInfo[],
+  element: HTMLElement,
+  imgSrc?: string,
+}
+
+const elements = ref<ElementInfo[]>([])
+
+const getElementInfo = (element: HTMLElement): ElementInfo => {
+  const rect = element.getBoundingClientRect()
+  const styles = window.getComputedStyle(element)
+  let imgSrc = undefined
+  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
+  return { rect, styles, children, element, imgSrc }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -29,18 +48,17 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
     return ' '
   }
   const convertToEmoji = (brightness: number) => {
-    if (brightness > 220) return '😊'
-    if (brightness > 160) return '😎'
-    if (brightness > 120) return '👀'
-    if (brightness > 100) return '🎶'
+    if (brightness > 220) return '❤'
+    if (brightness > 160) return '❤'
+    if (brightness > 120) return '❤'
+    if (brightness > 100) return '❤'
     if (brightness > 80) return '❤'
-    if (brightness > 60) return '👌'
-    if (brightness > 40) return '✔'
-    return ' '
+    if (brightness > 60) return '❤'
+    if (brightness > 40) return '❤'
+    return '❤'
   }
 
   const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-  console.log(pixels)
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   const imageCellArray = []
   for (let y = 0; y < pixels.height; y += cellSize) {
@@ -68,7 +86,7 @@ const renderHtmlToCanvas = async (
   imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
   effectArgs: any[]
 ) => {
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
   const parser = new DOMParser()
@@ -115,40 +133,31 @@ const renderHtmlToCanvas = async (
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
 
-  loadedImages.slice(0, -1).forEach((image) => {
-    // get the image width and height before deleting image above
-    ctx.drawImage(image, 0, 0, 500, 500)
+  loadedImages.slice(0, -1).forEach((image, index) => {
+    const imgElement = imageArray[index]
+    const imgInfo = elements.value[0].children.find((el) => el.imgSrc === imgElement.src)
+    // TODO: what if width and height not defined? probably need to get from bounding box not styles -> actually they seem autofilled..??
+    ctx.drawImage(image, parseInt(imgInfo?.styles.x!), parseInt(imgInfo?.styles.y!), parseInt(imgInfo?.styles.width!), parseInt(imgInfo?.styles.height!))
   })
 
-  imageEffect(ctx, ...effectArgs);
-};
-
+  imageEffect(ctx, ...effectArgs)
+}
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
+    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
     renderHtmlToCanvas(canvas.value, html, asciiize, [10])
   }
 }
 
-onMounted(async () => {
-  await nextTick()
-  updateCanvas()
-
-  slotContainer.value?.addEventListener('mouseenter', updateCanvas)
-  slotContainer.value?.addEventListener('mouseleave', updateCanvas)
-  slotContainer.value?.addEventListener('click', updateCanvas)
-})
-
-onBeforeUnmount(() => {
-  if (slotContainer.value) {
-    slotContainer.value.removeEventListener('mouseenter', updateCanvas)
-    slotContainer.value.removeEventListener('mouseleave', updateCanvas)
-    slotContainer.value.removeEventListener('click', updateCanvas)
-  }
-})
+// onMounted(async () => {
+//   await nextTick()
+//   updateCanvas()
+// })
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
+  // handles as though onMounted
   if (newVal !== oldVal) {
     updateCanvas()
   }

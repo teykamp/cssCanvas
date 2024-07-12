@@ -30,7 +30,7 @@ const elements = ref<ElementInfo[]>([])
 const getElementInfo = (element: HTMLElement): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
-  let imgSrc = undefined
+  let imgSrc: string | undefined = undefined
   if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
   return { rect, styles, children, element, imgSrc }

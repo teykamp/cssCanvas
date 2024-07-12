@@ -7,7 +7,7 @@
           </div>
         </div>
         <div
-          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: lightcoral; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large;">
+          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large; z-index: 100;">
           THISASDFGHJKL
         </div>
         <!-- <button :style="style" @click="style.backgroundColor = style.backgroundColor === 'red' ? 'blue' : 'red'">hi</button> -->

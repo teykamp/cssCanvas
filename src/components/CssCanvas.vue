@@ -150,8 +150,8 @@ const renderHtmlToCanvas = async (
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
     if (imgInfo) {
-      const { x, y, width, height } = imgInfo.styles
-      ctx.drawImage(image, parseInt(x), parseInt(y), parseInt(width), parseInt(height))
+      const { left, top, width, height } = imgInfo.styles
+      ctx.drawImage(image, parseInt(left), parseInt(top), parseInt(width), parseInt(height))
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
@@ -164,7 +164,7 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
-    renderHtmlToCanvas(canvas.value, html, asciiize, [10])
+    renderHtmlToCanvas(canvas.value, html, asciiize, [7])
   }
 }
 

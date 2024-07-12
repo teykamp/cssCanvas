@@ -3,113 +3,180 @@
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
     <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
-  </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
-
-const width = 800
-const height = 600
-
-interface ElementInfo {
-  rect: DOMRect
-  styles: CSSStyleDeclaration
-  children: ElementInfo[]
+const { width, height } = {
+  width: window.innerWidth - 20,
+  height: window.innerHeight - 20
 }
 
-const getElementInfo = (element: Element): ElementInfo => {
+type ElementInfo = {
+  rect: DOMRect,
+  styles: CSSStyleDeclaration,
+  children: ElementInfo[],
+  element: HTMLElement,
+  imgSrc?: string,
+}
+
+const elements = ref<ElementInfo[]>([])
+
+const getElementInfo = (element: HTMLElement): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
-  const children = Array.from(element.children).map(getElementInfo)
-  return { rect, styles, children }
+  let imgSrc = undefined
+  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
+  return { rect, styles, children, element, imgSrc }
 }
 
-const drawRoundedRect = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number
-) => {
-  ctx.beginPath()
-  ctx.moveTo(x + radius, y)
-  ctx.lineTo(x + width - radius, y)
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
-  ctx.lineTo(x + width, y + height - radius)
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
-  ctx.lineTo(x + radius, y + height)
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
-  ctx.lineTo(x, y + radius)
-  ctx.quadraticCurveTo(x, y, x + radius, y)
-  ctx.closePath()
-}
-
-const drawElement = (ctx: CanvasRenderingContext2D, elementInfo: ElementInfo) => {
-  const { rect, styles, children } = elementInfo
-
-  const backgroundColor = styles.backgroundColor
-  const borderColor = styles.borderColor
-  const borderWidth = parseFloat(styles.borderWidth)
-  const borderRadius = parseFloat(styles.borderRadius)
-
-  ctx.fillStyle = backgroundColor
-
-  const width = parseFloat(styles.width) - 2 * borderWidth
-  const height = parseFloat(styles.height) - 2 * borderWidth
-  const minRadius = Math.min(width, height) / 2
-  const isCircle = borderRadius >= minRadius
-
-  if (isCircle) {
-    const radius = (rect.width - borderWidth) / 2
-    const centerX = rect.left + radius + borderWidth / 2
-    const centerY = rect.top + radius + borderWidth / 2
-
-    ctx.beginPath()
-    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
-    ctx.closePath()
-    ctx.fill()
-
-    if (borderWidth > 0) {
-      ctx.strokeStyle = borderColor
-      ctx.lineWidth = borderWidth
-      ctx.beginPath()
-      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
-      ctx.closePath()
-      ctx.stroke()
-    }
-  } else {
-    drawRoundedRect(ctx, rect.left, rect.top, rect.width, rect.height, borderRadius)
-    ctx.fill()
-
-    if (borderWidth > 0) {
-      ctx.strokeStyle = borderColor
-      ctx.lineWidth = borderWidth
-      ctx.stroke()
-    }
+const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
+  const convertToAscii = (brightness: number) => {
+    if (brightness > 220) return '█'
+    if (brightness > 160) return '▓'
+    if (brightness > 120) return '#'
+    if (brightness > 100) return 'X'
+    if (brightness > 80) return '▒'
+    if (brightness > 60) return 'C'
+    if (brightness > 40) return '░'
+    return ' '
+  }
+  const convertToEmoji = (brightness: number) => {
+    if (brightness > 220) return '❤'
+    if (brightness > 160) return '❤'
+    if (brightness > 120) return '❤'
+    if (brightness > 100) return '❤'
+    if (brightness > 80) return '❤'
+    if (brightness > 60) return '❤'
+    if (brightness > 40) return '❤'
+    return '❤'
   }
 
-  children.forEach((child) => drawElement(ctx, child))
+  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  const imageCellArray = []
+  for (let y = 0; y < pixels.height; y += cellSize) {
+    for (let x = 0; x < pixels.width; x += cellSize) {
+      const pixelPosition = 4 * (pixels.width * y + x)
+      if (pixels.data[pixelPosition + 3] > 50) {
+        const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
+        const brightness = (red + green + blue) / 3
+        const symbol = convertToEmoji(brightness)
+        const color = `rgb(${red}, ${green}, ${blue})`
+        imageCellArray.push({ x, y, symbol, color })
+        ctx.font = cellSize + 'px monospace'
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.1)'
+        ctx.fillText(symbol, x + 1, y + 1)
+        ctx.fillStyle = color
+        ctx.fillText(symbol, x, y)
+      }
+    }
+  }
 }
 
-const drawOnCanvas = () => {
-  if (!canvas.value || !slotContainer.value) return
+const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null => {
+  for (let element of elements) {
+    if (element.imgSrc === src) {
+      return element
+    } else if (element.children) {
+      const found = findImageInfo(element.children, src)
+      if (found) return found
+    }
+  }
+  return null
+}
 
-  const ctx = canvas.value.getContext('2d')
+const renderHtmlToCanvas = async (
+  canvas: HTMLCanvasElement,
+  html: string,
+  imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
+  effectArgs: any[]
+) => {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
-  const elements = Array.from(slotContainer.value.children).map(getElementInfo)
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const images = doc.querySelectorAll('img')
+  const imageArray = Array.from(images) as HTMLImageElement[]
 
-  elements.forEach((element) => drawElement(ctx, element))
+  const imagePromises: Promise<HTMLImageElement>[] = []
+
+  imageArray.forEach((img) => {
+    const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = reject
+      image.src = img.src
+    })
+
+    imagePromises.push(imgPromise)
+
+    img.parentNode?.removeChild(img)
+  })
+
+  const modifiedHtml = doc.body.innerHTML
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
+      <foreignObject width="100%" height="100%">
+        <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
+      </foreignObject>
+    </svg>
+  `
+
+  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`
+
+  const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const htmlImage = new Image()
+    htmlImage.onload = () => resolve(htmlImage)
+    htmlImage.onerror = reject
+    htmlImage.src = encodedSvg
+  })
+  imagePromises.push(svgPromise)
+
+  const loadedImages = await Promise.all(imagePromises)
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
+
+  loadedImages.slice(0, -1).forEach((image, index) => {
+    const imgElement = imageArray[index]
+    const imgInfo = findImageInfo(elements.value, imgElement.src)
+
+    if (imgInfo) {
+      const { x, y, width, height } = imgInfo.styles
+      ctx.drawImage(image, parseInt(x), parseInt(y), parseInt(width), parseInt(height))
+    } else {
+      console.error(`Image info not found for source: ${imgElement.src}`)
+    }
+  })
+
+  imageEffect(ctx, ...effectArgs)
 }
 
-onMounted(async () => {
-  await nextTick()
-  drawOnCanvas()
+const updateCanvas = () => {
+  if (slotContainer.value && canvas.value) {
+    const html = slotContainer.value.innerHTML
+    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
+    renderHtmlToCanvas(canvas.value, html, asciiize, [10])
+  }
+}
+
+// onMounted(async () => {
+//   await nextTick()
+//   updateCanvas()
+// })
+
+watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
+  // handles as though onMounted
+  if (newVal !== oldVal) {
+    updateCanvas()
+  }
 })
 </script>

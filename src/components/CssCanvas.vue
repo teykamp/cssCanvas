@@ -80,6 +80,18 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   }
 }
 
+const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null => {
+  for (let element of elements) {
+    if (element.imgSrc === src) {
+      return element
+    } else if (element.children) {
+      const found = findImageInfo(element.children, src)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
@@ -135,9 +147,14 @@ const renderHtmlToCanvas = async (
 
   loadedImages.slice(0, -1).forEach((image, index) => {
     const imgElement = imageArray[index]
-    const imgInfo = elements.value[0].children.find((el) => el.imgSrc === imgElement.src)
-    // TODO: what if width and height not defined? probably need to get from bounding box not styles -> actually they seem autofilled..??
-    ctx.drawImage(image, parseInt(imgInfo?.styles.x!), parseInt(imgInfo?.styles.y!), parseInt(imgInfo?.styles.width!), parseInt(imgInfo?.styles.height!))
+    const imgInfo = findImageInfo(elements.value, imgElement.src)
+
+    if (imgInfo) {
+      const { x, y, width, height } = imgInfo.styles
+      ctx.drawImage(image, parseInt(x), parseInt(y), parseInt(width), parseInt(height))
+    } else {
+      console.error(`Image info not found for source: ${imgElement.src}`)
+    }
   })
 
   imageEffect(ctx, ...effectArgs)

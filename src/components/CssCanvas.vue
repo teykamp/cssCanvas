@@ -95,8 +95,10 @@ const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
-  imageEffect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
-  effectArgs: any[]
+  imageEffects: ({
+    effect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
+    args?: any[]
+  })[],
 ) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
@@ -164,14 +166,23 @@ const renderHtmlToCanvas = async (
     }
   })
 
-  imageEffect(ctx, ...effectArgs)
+  imageEffects.forEach(imageEffect => {
+    const { effect, args } = imageEffect
+    args ? effect(ctx, ...args) : effect(ctx)
+  })
+  
 }
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
-    renderHtmlToCanvas(canvas.value, html, asciiize, [7])
+    renderHtmlToCanvas(canvas.value, html, [
+      {
+        effect: asciiize,
+      args: [7]
+    },
+    ])
   }
 }
 

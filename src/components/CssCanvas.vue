@@ -130,7 +130,14 @@ const renderHtmlToCanvas = async (
     </svg>
   `
 
-  const encodedSvg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`
+  const utf8ToBase64 = (str: string) => {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+      return String.fromCharCode(parseInt(p1, 16))
+    }))
+  }
+
+  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
+
 
   const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
     const htmlImage = new Image()

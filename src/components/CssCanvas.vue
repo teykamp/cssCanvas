@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 1; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -23,6 +23,7 @@ type ElementInfo = {
   children: ElementInfo[],
   element: HTMLElement,
   imgSrc?: string,
+  textContent?: string,
 }
 
 const elements = ref<ElementInfo[]>([])
@@ -32,8 +33,12 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const styles = window.getComputedStyle(element)
   let imgSrc: string | undefined = undefined
   if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  let textContent: string | undefined = undefined
+  if (element.classList.contains('no-transform-text')) {
+    textContent = element.textContent || ''
+  }
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, styles, children, element, imgSrc }
+  return { rect, styles, children, element, imgSrc, textContent }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -170,7 +175,18 @@ const renderHtmlToCanvas = async (
     const { effect, args } = imageEffect
     args ? effect(ctx, ...args) : effect(ctx)
   })
-  
+
+  const drawText = (element: ElementInfo) => {
+    if (element.textContent) {
+      const { left, top, fontSize, fontFamily, color } = element.styles
+      ctx.font = `${fontSize} ${fontFamily}`
+      ctx.fillStyle = color
+      ctx.fillText(element.textContent, parseInt(left), parseInt(top) + parseInt(fontSize))
+    }
+    element.children.forEach(child => drawText(child))
+  }
+
+  elements.value.forEach(element => drawText(element))
 }
 
 const updateCanvas = () => {
@@ -180,16 +196,11 @@ const updateCanvas = () => {
     renderHtmlToCanvas(canvas.value, html, [
       {
         effect: asciiize,
-      args: [7]
-    },
+        args: [7]
+      },
     ])
   }
 }
-
-// onMounted(async () => {
-//   await nextTick()
-//   updateCanvas()
-// })
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
   // handles as though onMounted

@@ -54,23 +54,13 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       textAlign: styles.textAlign,
       width: rect.width
     }
-    element.style.color = 'rgba(0, 0, 0, 0)'
   }
+  element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
   return { rect, children, element, imgSrc, textContent, textPosition }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
-  const convertToAscii = (brightness: number) => {
-    if (brightness > 220) return '█'
-    if (brightness > 160) return '▓'
-    if (brightness > 120) return '#'
-    if (brightness > 100) return 'X'
-    if (brightness > 80) return '▒'
-    if (brightness > 60) return 'C'
-    if (brightness > 40) return '░'
-    return '_'
-  }
   const convertToEmoji = (brightness: number) => {
     if (brightness > 220) return '❤'
     if (brightness > 160) return '❤'
@@ -116,6 +106,19 @@ const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null
   return null
 }
 
+const updateHtmlForCanvas = (html: string): string => {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
+
+    console.log(noTextTransformElements)
+  noTextTransformElements.forEach(element => {
+    element.style.color = 'rgba(0, 0, 0, 0)'
+  })
+
+  return doc.body.innerHTML
+}
+
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
@@ -127,8 +130,9 @@ const renderHtmlToCanvas = async (
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
+  const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
+  const doc = parser.parseFromString(updatedHtml, 'text/html')
   const images = doc.querySelectorAll('img')
   const imageArray = Array.from(images) as HTMLImageElement[]
 
@@ -162,7 +166,7 @@ const renderHtmlToCanvas = async (
     }))
   }
 
-  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
+  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
 
 
   const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
@@ -221,7 +225,6 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
-    console.log(JSON.stringify(elements.value, null, 2))
     renderHtmlToCanvas(canvas.value, html, [
       {
         effect: asciiize,
@@ -237,4 +240,5 @@ watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
     updateCanvas()
   }
 })
+
 </script>

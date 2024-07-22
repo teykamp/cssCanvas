@@ -1,14 +1,14 @@
 <template>
   <div>
     <CssCanvas>
-      <p style="font-size: x-large; position: absolute; text-align: right; width: 500px;" class="no-transform-text">HIHIHIHHI</p>
+      <div style="font-size: x-large; position: absolute; text-align: right; width: 500px;" class="no-transform-text">HIHIHIHHI</div>
       <div style="display: flex;">
         <div style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute;">
           <div style="width: 10px; height: 10px; background-color: aqua; left: 500px; top: 50px; position: absolute;">
           </div>
         </div>
         <div
-          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large; z-index: 100;" class="no-transform-text">
+          style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large;" class="no-transform-text">
           THISASDFGHJKL
         </div>
         <!-- <button :style="style" @click="style.backgroundColor = style.backgroundColor === 'red' ? 'blue' : 'red'">hi</button> -->

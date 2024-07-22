@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 1; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -24,6 +24,15 @@ type ElementInfo = {
   element: HTMLElement,
   imgSrc?: string,
   textContent?: string,
+  textPosition?: {
+    left: number,
+    top: number,
+    fontSize: string,
+    fontFamily: string,
+    color: string,
+    textAlign: string,
+    width: number,
+  }
 }
 
 const elements = ref<ElementInfo[]>([])
@@ -34,11 +43,22 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   let imgSrc: string | undefined = undefined
   if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
   let textContent: string | undefined = undefined
+  let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
     textContent = element.textContent || ''
+    textPosition = {
+      left: rect.left,
+      top: rect.top,
+      fontSize: styles.fontSize,
+      fontFamily: styles.fontFamily,
+      color: styles.color,
+      textAlign: styles.textAlign,
+      width: rect.width
+    }
+    element.style.color = 'rgba(0,0,0,0)'
   }
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, styles, children, element, imgSrc, textContent }
+  return { rect, styles, children, element, imgSrc, textContent, textPosition }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -177,11 +197,20 @@ const renderHtmlToCanvas = async (
   })
 
   const drawText = (element: ElementInfo) => {
-    if (element.textContent) {
-      const { left, top, fontSize, fontFamily, color } = element.styles
+    if (element.textContent && element.textPosition) {
+      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
       ctx.font = `${fontSize} ${fontFamily}`
       ctx.fillStyle = color
-      ctx.fillText(element.textContent, parseInt(left), parseInt(top) + parseInt(fontSize))
+      ctx.textAlign = textAlign as CanvasTextAlign
+
+      let x = left
+      if (textAlign === 'center') {
+        x += width / 2
+      } else if (textAlign === 'right') {
+        x += width
+      }
+
+      ctx.fillText(element.textContent, x, top + parseInt(fontSize))
     }
     element.children.forEach(child => drawText(child))
   }

@@ -19,7 +19,6 @@ const { width, height } = {
 
 type ElementInfo = {
   rect: DOMRect,
-  styles: CSSStyleDeclaration,
   children: ElementInfo[],
   element: HTMLElement,
   imgSrc?: string,
@@ -55,10 +54,10 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       textAlign: styles.textAlign,
       width: rect.width
     }
-    element.style.color = 'rgba(0,0,0,0)'
+    element.style.color = 'rgba(0, 0, 0, 0)'
   }
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, styles, children, element, imgSrc, textContent, textPosition }
+  return { rect, children, element, imgSrc, textContent, textPosition }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -70,7 +69,7 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
     if (brightness > 80) return '▒'
     if (brightness > 60) return 'C'
     if (brightness > 40) return '░'
-    return ' '
+    return '_'
   }
   const convertToEmoji = (brightness: number) => {
     if (brightness > 220) return '❤'
@@ -184,8 +183,8 @@ const renderHtmlToCanvas = async (
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
     if (imgInfo) {
-      const { left, top, width, height } = imgInfo.styles
-      ctx.drawImage(image, parseInt(left), parseInt(top), parseInt(width), parseInt(height))
+      const { left, top, width, height } = imgInfo.rect
+      ctx.drawImage(image, left, top, width, height)
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
@@ -222,6 +221,7 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
+    console.log(JSON.stringify(elements.value, null, 2))
     renderHtmlToCanvas(canvas.value, html, [
       {
         effect: asciiize,

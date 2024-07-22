@@ -19,10 +19,19 @@ const { width, height } = {
 
 type ElementInfo = {
   rect: DOMRect,
-  styles: CSSStyleDeclaration,
   children: ElementInfo[],
   element: HTMLElement,
   imgSrc?: string,
+  textContent?: string,
+  textPosition?: {
+    left: number,
+    top: number,
+    fontSize: string,
+    fontFamily: string,
+    color: string,
+    textAlign: string,
+    width: number,
+  }
 }
 
 const elements = ref<ElementInfo[]>([])
@@ -32,21 +41,26 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const styles = window.getComputedStyle(element)
   let imgSrc: string | undefined = undefined
   if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  let textContent: string | undefined = undefined
+  let textPosition: ElementInfo['textPosition'] | undefined = undefined
+  if (element.classList.contains('no-transform-text')) {
+    textContent = element.textContent || ''
+    textPosition = {
+      left: rect.left,
+      top: rect.top,
+      fontSize: styles.fontSize,
+      fontFamily: styles.fontFamily,
+      color: styles.color,
+      textAlign: styles.textAlign,
+      width: rect.width
+    }
+  }
+  element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, styles, children, element, imgSrc }
+  return { rect, children, element, imgSrc, textContent, textPosition }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
-  const convertToAscii = (brightness: number) => {
-    if (brightness > 220) return '█'
-    if (brightness > 160) return '▓'
-    if (brightness > 120) return '#'
-    if (brightness > 100) return 'X'
-    if (brightness > 80) return '▒'
-    if (brightness > 60) return 'C'
-    if (brightness > 40) return '░'
-    return ' '
-  }
   const convertToEmoji = (brightness: number) => {
     if (brightness > 220) return '❤'
     if (brightness > 160) return '❤'
@@ -92,6 +106,19 @@ const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null
   return null
 }
 
+const updateHtmlForCanvas = (html: string): string => {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
+
+    console.log(noTextTransformElements)
+  noTextTransformElements.forEach(element => {
+    element.style.color = 'rgba(0, 0, 0, 0)'
+  })
+
+  return doc.body.innerHTML
+}
+
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
@@ -103,8 +130,9 @@ const renderHtmlToCanvas = async (
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
+  const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
+  const doc = parser.parseFromString(updatedHtml, 'text/html')
   const images = doc.querySelectorAll('img')
   const imageArray = Array.from(images) as HTMLImageElement[]
 
@@ -138,7 +166,7 @@ const renderHtmlToCanvas = async (
     }))
   }
 
-  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
+  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
 
 
   const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
@@ -159,8 +187,8 @@ const renderHtmlToCanvas = async (
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
     if (imgInfo) {
-      const { left, top, width, height } = imgInfo.styles
-      ctx.drawImage(image, parseInt(left), parseInt(top), parseInt(width), parseInt(height))
+      const { left, top, width, height } = imgInfo.rect
+      ctx.drawImage(image, left, top, width, height)
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
@@ -170,7 +198,27 @@ const renderHtmlToCanvas = async (
     const { effect, args } = imageEffect
     args ? effect(ctx, ...args) : effect(ctx)
   })
-  
+
+  const drawText = (element: ElementInfo) => {
+    if (element.textContent && element.textPosition) {
+      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
+      ctx.font = `${fontSize} ${fontFamily}`
+      ctx.fillStyle = color
+      ctx.textAlign = textAlign as CanvasTextAlign
+
+      let x = left
+      if (textAlign === 'center') {
+        x += width / 2
+      } else if (textAlign === 'right') {
+        x += width
+      }
+
+      ctx.fillText(element.textContent, x, top + parseInt(fontSize))
+    }
+    element.children.forEach(child => drawText(child))
+  }
+
+  elements.value.forEach(element => drawText(element))
 }
 
 const updateCanvas = () => {
@@ -180,16 +228,11 @@ const updateCanvas = () => {
     renderHtmlToCanvas(canvas.value, html, [
       {
         effect: asciiize,
-      args: [7]
-    },
+        args: [7]
+      },
     ])
   }
 }
-
-// onMounted(async () => {
-//   await nextTick()
-//   updateCanvas()
-// })
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
   // handles as though onMounted
@@ -197,4 +240,5 @@ watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
     updateCanvas()
   }
 })
+
 </script>

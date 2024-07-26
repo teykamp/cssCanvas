@@ -22,6 +22,7 @@ type ElementInfo = {
   children: ElementInfo[],
   element: HTMLElement,
   imgSrc?: string,
+  imgStyles?: CSSStyleDeclaration,
   textContent?: string,
   textPosition?: {
     left: number,
@@ -40,7 +41,11 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
   let imgSrc: string | undefined = undefined
-  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  let imgStyles: CSSStyleDeclaration | undefined = undefined
+  if (element.tagName === 'IMG') {
+    imgSrc = (element as HTMLImageElement).src
+    imgStyles = styles
+  }
   let textContent: string | undefined = undefined
   let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
@@ -57,7 +62,7 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   }
   element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, textContent, textPosition }
+  return { rect, children, element, imgSrc, imgStyles, textContent, textPosition }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -111,7 +116,6 @@ const updateHtmlForCanvas = (html: string): string => {
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
 
-    console.log(noTextTransformElements)
   noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
   })
@@ -186,9 +190,23 @@ const renderHtmlToCanvas = async (
     const imgElement = imageArray[index]
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
-    if (imgInfo) {
+    if (imgInfo && imgInfo.imgStyles) {
       const { left, top, width, height } = imgInfo.rect
+      const styles = imgInfo.imgStyles
+
+      const transform = styles.transform
+      const opacity = parseFloat(styles.opacity)
+
+      ctx.save()
+      if (transform) {
+        const matrix = new DOMMatrix(transform)
+        ctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+      }
+      if (!isNaN(opacity)) {
+        ctx.globalAlpha = opacity
+      }
       ctx.drawImage(image, left, top, width, height)
+      ctx.restore()
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
@@ -215,6 +233,7 @@ const renderHtmlToCanvas = async (
 
       ctx.fillText(element.textContent, x, top + parseInt(fontSize))
     }
+
     element.children.forEach(child => drawText(child))
   }
 

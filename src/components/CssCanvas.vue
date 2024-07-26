@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 0.5; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -200,7 +200,14 @@ const renderHtmlToCanvas = async (
       ctx.save()
       if (transform) {
         const matrix = new DOMMatrix(transform)
-        ctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+        // Calculate the center of the image
+        const centerX = left + width / 2
+        const centerY = top + height / 2
+
+        // Translate to the center, apply the transformation, and then translate back
+        ctx.translate(centerX, centerY)
+        ctx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+        ctx.translate(-centerX, -centerY)
       }
       if (!isNaN(opacity)) {
         ctx.globalAlpha = opacity

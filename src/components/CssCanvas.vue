@@ -67,13 +67,6 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   const convertToEmoji = (brightness: number) => {
-    if (brightness > 220) return '❤'
-    if (brightness > 160) return '❤'
-    if (brightness > 120) return '❤'
-    if (brightness > 100) return '❤'
-    if (brightness > 80) return '❤'
-    if (brightness > 60) return '❤'
-    if (brightness > 40) return '❤'
     return '❤'
   }
 
@@ -191,8 +184,11 @@ const renderHtmlToCanvas = async (
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
     if (imgInfo && imgInfo.imgStyles) {
-      const { left, top, width, height } = imgInfo.rect
+      const { left, top } = imgInfo.rect
       const styles = imgInfo.imgStyles
+
+      const width = parseFloat(styles.width)
+      const height = parseFloat(styles.height)
 
       const transform = styles.transform
       const opacity = parseFloat(styles.opacity)
@@ -200,15 +196,14 @@ const renderHtmlToCanvas = async (
       ctx.save()
       if (transform) {
         const matrix = new DOMMatrix(transform)
-        // Calculate the center of the image
         const centerX = left + width / 2
         const centerY = top + height / 2
 
-        // Translate to the center, apply the transformation, and then translate back
         ctx.translate(centerX, centerY)
         ctx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
         ctx.translate(-centerX, -centerY)
       }
+
       if (!isNaN(opacity)) {
         ctx.globalAlpha = opacity
       }

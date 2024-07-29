@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 0.5; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -24,7 +24,7 @@ type ElementInfo = {
   imgSrc?: string,
   imgStyles?: CSSStyleDeclaration,
   textContent?: string,
-  textPosition?: {
+  testStyles?: {
     left: number,
     top: number,
     fontSize: string,
@@ -47,10 +47,10 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
     imgStyles = styles
   }
   let textContent: string | undefined = undefined
-  let textPosition: ElementInfo['textPosition'] | undefined = undefined
+  let testStyles: ElementInfo['testStyles'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
     textContent = element.textContent || ''
-    textPosition = {
+    testStyles = {
       left: rect.left,
       top: rect.top,
       fontSize: styles.fontSize,
@@ -60,9 +60,8 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       width: rect.width
     }
   }
-  element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, imgStyles, textContent, textPosition }
+  return { rect, children, element, imgSrc, imgStyles, textContent, testStyles }
 }
 
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
@@ -220,8 +219,9 @@ const renderHtmlToCanvas = async (
   })
 
   const drawText = (element: ElementInfo) => {
-    if (element.textContent && element.textPosition) {
-      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
+    if (element.textContent && element.testStyles) {
+      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.testStyles
+      console.log(color, element.textContent)
       ctx.font = `${fontSize} ${fontFamily}`
       ctx.fillStyle = color
       ctx.textAlign = textAlign as CanvasTextAlign

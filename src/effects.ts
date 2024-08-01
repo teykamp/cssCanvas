@@ -1,3 +1,9 @@
+type Effect = {
+  name?: string,
+  effect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
+  args?: any[]
+}
+
 const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   const convertToEmoji = (brightness: number) => {
     if (brightness > 220) return '❤'
@@ -32,7 +38,9 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   }
 }
 
-const effects = [
+// /////////////////////////////////////////////////////////// //
+
+const effects: Effect[] = [
   {
     name: 'ascii',
     effect: asciiize,
@@ -40,4 +48,5 @@ const effects = [
   },
 ]
 
+export type { Effect }
 export { effects }

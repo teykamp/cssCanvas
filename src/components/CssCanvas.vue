@@ -10,7 +10,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import { effects } from '@/effects.ts'
+import { effects, type Effect } from '@/effects.ts'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -80,7 +80,6 @@ const updateHtmlForCanvas = (html: string): string => {
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
 
-    console.log(noTextTransformElements)
   noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
   })
@@ -88,13 +87,51 @@ const updateHtmlForCanvas = (html: string): string => {
   return doc.body.innerHTML
 }
 
+const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
+
+  const getEffectName = (effect: Effect): string => {
+    return effect.name || effect.effect.name
+  }
+
+  const effectTags = new Set(effectString
+    .split(' ')
+    .filter(tag => tag.startsWith('effect-'))
+    .map(tag => tag.substring('effect-'.length))
+  )
+
+  const hasEffectAll = effectTags.has('effect-all')
+
+  if (hasEffectAll) {
+    effects.forEach(({ effect, args }) => {
+      const effectName = getEffectName({ effect, args })
+
+      if (!effectTags.has(effectName)) {
+        effect(ctx, ...(args || []))
+      }
+    })
+  } else {
+    effectTags.forEach(tag => {
+      if (tag.startsWith('effect-')) {
+        const effectName = tag.substring('effect-'.length)
+
+        const effectEntry = effects.find(effect => getEffectName(effect) === effectName)
+
+        if (effectEntry) {
+          const { effect, args } = effectEntry
+          effect(ctx, ...(args || []))
+        } else {
+          console.warn(`No effect found for tag: ${tag}`)
+        }
+      }
+    })
+  }
+}
+
+
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
-  imageEffects: ({
-    effect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
-    args?: any[]
-  })[],
+  imageEffects: Effect[],
 ) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
@@ -104,11 +141,11 @@ const renderHtmlToCanvas = async (
   const doc = parser.parseFromString(updatedHtml, 'text/html')
 
   // get parent wrapper class to use for later when rendering effects fop svg
-  // let parentClass = ''
-  // if (doc.body.children.length === 1) {
-  //   const parentElement = doc.body.children[0]
-  //   parentClass = parentElement.className
-  // }
+  let parentClass = ''
+  if (doc.body.children.length === 1) {
+    const parentElement = doc.body.children[0]
+    parentClass = parentElement.className
+  }
 
   const images = doc.querySelectorAll('img')
   const imageArray = Array.from(images) as HTMLImageElement[]
@@ -212,34 +249,4 @@ watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
     updateCanvas()
   }
 })
-
-
-// const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string) => {
-//   const effectTags = effectString.split(' ')
-
-//   const hasEffectAll = effectTags.includes('effect-all')
-
-//   if (hasEffectAll) {
-//     for (const effectName in effectFunctions) {
-//       if (
-//         effectFunctions.hasOwnProperty(effectName) &&
-//         !effectTags.includes(`effect-${effectName}`)
-//       ) {
-//         effectFunctions[effectName]()
-//       }
-//     }
-//   } else {
-//     for (const tag of effectTags) {
-//       if (tag.startsWith('effect-')) {
-//         const effectName = tag.substring('effect-'.length)
-
-//         if (effectFunctions.hasOwnProperty(effectName)) {
-//           effectFunctions[effectName]()
-//         } else {
-//           console.warn(`No effect found for tag: ${tag}`)
-//         }
-//       }
-//     }
-//   }
-// }
 </script>

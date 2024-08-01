@@ -133,6 +133,14 @@ const renderHtmlToCanvas = async (
   const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
   const doc = parser.parseFromString(updatedHtml, 'text/html')
+
+  // get parent wrapper class to use for later when rendering effects fop svg
+  // let parentClass = ''
+  // if (doc.body.children.length === 1) {
+  //   const parentElement = doc.body.children[0]
+  //   parentClass = parentElement.className
+  // }
+
   const images = doc.querySelectorAll('img')
   const imageArray = Array.from(images) as HTMLImageElement[]
 

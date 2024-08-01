@@ -241,4 +241,33 @@ watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
   }
 })
 
+
+// const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string) => {
+//   const effectTags = effectString.split(' ')
+
+//   const hasEffectAll = effectTags.includes('effect-all')
+
+//   if (hasEffectAll) {
+//     for (const effectName in effectFunctions) {
+//       if (
+//         effectFunctions.hasOwnProperty(effectName) &&
+//         !effectTags.includes(`effect-${effectName}`)
+//       ) {
+//         effectFunctions[effectName]()
+//       }
+//     }
+//   } else {
+//     for (const tag of effectTags) {
+//       if (tag.startsWith('effect-')) {
+//         const effectName = tag.substring('effect-'.length)
+
+//         if (effectFunctions.hasOwnProperty(effectName)) {
+//           effectFunctions[effectName]()
+//         } else {
+//           console.warn(`No effect found for tag: ${tag}`)
+//         }
+//       }
+//     }
+//   }
+// }
 </script>

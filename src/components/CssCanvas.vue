@@ -108,7 +108,7 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
       const effectName = getEffectName({ effect, args })
 
       if (!effectTags.has(effectName)) {
-        effect(ctx, ...(args || []))
+        args ? effect(ctx, ...args) : effect(ctx)
       }
     })
   } else {
@@ -120,7 +120,7 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
 
         if (effectEntry) {
           const { effect, args } = effectEntry
-          effect(ctx, ...(args || []))
+          args ? effect(ctx, ...args) : effect(ctx)
         } else {
           console.warn(`No effect found for tag: ${tag}`)
         }

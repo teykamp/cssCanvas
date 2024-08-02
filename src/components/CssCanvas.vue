@@ -89,6 +89,8 @@ const updateHtmlForCanvas = (html: string): string => {
 
 const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
 
+  if (effectString.split(' ').includes('no-transform-text')) return // later will still need to run efefct on element
+
   const getEffectName = (effect: Effect): string => {
     return effect.name || effect.effect.name
   }
@@ -126,7 +128,6 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
     })
   }
 }
-
 
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
@@ -194,6 +195,13 @@ const renderHtmlToCanvas = async (
   const loadedImages = await Promise.all(imagePromises)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // rendering happening after this comment
+
+  // will need to combine render functions into one with some checks. need to get order right. 
+  // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
+  // setting text to transparent and rendering it last
+
   ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
 
   loadedImages.slice(0, -1).forEach((image, index) => {

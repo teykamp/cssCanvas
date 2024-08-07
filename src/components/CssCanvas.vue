@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 0.5; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -225,7 +225,7 @@ const renderHtmlToCanvas = async (
     if (element.textContent && element.textPosition) {
       const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
       ctx.font = `${fontSize} ${fontFamily}`
-      ctx.fillStyle = color
+      ctx.fillStyle = color === 'rgba(0, 0, 0, 0)' ? 'black' : color
       ctx.textAlign = textAlign as CanvasTextAlign
 
       let x = left

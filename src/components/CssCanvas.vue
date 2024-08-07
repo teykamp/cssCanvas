@@ -1,7 +1,7 @@
 <template>
   <div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
-    <div ref="slotContainer" style="opacity: 0.5; position: absolute; top: 0; left: 0">
+    <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
   </div>
@@ -23,6 +23,7 @@ type ElementInfo = {
   rect: DOMRect,
   children: ElementInfo[],
   element: HTMLElement,
+  combinedClass: string,
   imgSrc?: string,
   textContent?: string,
   textPosition?: {
@@ -41,6 +42,7 @@ const elements = ref<ElementInfo[]>([])
 const getElementInfo = (element: HTMLElement): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
+  const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
   if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
   let textContent: string | undefined = undefined
@@ -59,7 +61,7 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   }
   element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, textContent, textPosition }
+  return { rect, children, element, imgSrc, combinedClass, textContent, textPosition }
 }
 
 
@@ -79,8 +81,9 @@ const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
-
-  noTextTransformElements.forEach(element => {
+    
+    // sets text to invisible to redraw after
+    noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
   })
 
@@ -89,7 +92,7 @@ const updateHtmlForCanvas = (html: string): string => {
 
 const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
 
-  if (effectString.split(' ').includes('no-transform-text')) return // later will still need to run efefct on element
+  if (effectString.split(' ').includes('no-transform-text')) return // later will still need to run effect on element
 
   const getEffectName = (effect: Effect): string => {
     return effect.name || effect.effect.name
@@ -129,13 +132,23 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
   }
 }
 
+const combineAndApplyClassTags = (element: ElementInfo, parentClass: string = '') => {
+  const classList = element.element.classList
+  element.combinedClass = `${parentClass} ${Array.from(classList).join(' ')}`.trim()
+
+  element.children.forEach(child => combineAndApplyClassTags(child, element.combinedClass))
+}
+
 const renderHtmlToCanvas = async (
   canvas: HTMLCanvasElement,
   html: string,
-  imageEffects: Effect[],
 ) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
+
+  elements.value.forEach(element => {
+    combineAndApplyClassTags(element)
+  })
 
   const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
@@ -196,7 +209,7 @@ const renderHtmlToCanvas = async (
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // rendering happening after this comment
+  // rendering happening after this comment!!
 
   // will need to combine render functions into one with some checks. need to get order right. 
   // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
@@ -216,10 +229,10 @@ const renderHtmlToCanvas = async (
     }
   })
 
-  imageEffects.forEach(imageEffect => {
-    const { effect, args } = imageEffect
-    args ? effect(ctx, ...args) : effect(ctx)
-  })
+  // effects.forEach(imageEffect => {
+  //   const { effect, args } = imageEffect
+  //   args ? effect(ctx, ...args) : effect(ctx)
+  // })
 
   const drawText = (element: ElementInfo) => {
     if (element.textContent && element.textPosition) {
@@ -247,7 +260,13 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
-    renderHtmlToCanvas(canvas.value, html, effects)
+
+
+    // need to edit original array here
+    // then need to be able to do this for images and text (although this might be available here for text)
+    
+
+    renderHtmlToCanvas(canvas.value, html)
   }
 }
 

@@ -1,7 +1,7 @@
 <template>
   <div>
     <CssCanvas>
-      <div class="effect-ascii">
+      <div class="effect-all">
         <div style="font-size: x-large; position: absolute; text-align: right; width: 500px;" class="no-transform-text effect-ascii">HIHIHIHHI</div>
         <div style="display: flex;">
           <div style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute;">

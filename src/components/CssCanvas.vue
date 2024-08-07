@@ -104,7 +104,7 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
     .map(tag => tag.substring('effect-'.length))
   )
 
-  const hasEffectAll = effectTags.has('effect-all')
+  const hasEffectAll = effectTags.has('all')
 
   if (hasEffectAll) {
     effects.forEach(({ effect, args }) => {
@@ -116,10 +116,8 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
     })
   } else {
     effectTags.forEach(tag => {
-      if (tag.startsWith('effect-')) {
-        const effectName = tag.substring('effect-'.length)
 
-        const effectEntry = effects.find(effect => getEffectName(effect) === effectName)
+        const effectEntry = effects.find(effect => getEffectName(effect) === tag)
 
         if (effectEntry) {
           const { effect, args } = effectEntry
@@ -128,7 +126,7 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
           console.warn(`No effect found for tag: ${tag}`)
         }
       }
-    })
+    )
   }
 }
 
@@ -139,10 +137,7 @@ const combineAndApplyClassTags = (element: ElementInfo, parentClass: string = ''
   element.children.forEach(child => combineAndApplyClassTags(child, element.combinedClass))
 }
 
-const renderHtmlToCanvas = async (
-  canvas: HTMLCanvasElement,
-  html: string,
-) => {
+const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
 
@@ -215,6 +210,7 @@ const renderHtmlToCanvas = async (
   // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
   // setting text to transparent and rendering it last
 
+  // html
   ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
 
   loadedImages.slice(0, -1).forEach((image, index) => {
@@ -224,6 +220,8 @@ const renderHtmlToCanvas = async (
     if (imgInfo) {
       const { left, top, width, height } = imgInfo.rect
       ctx.drawImage(image, left, top, width, height)
+      // parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, ctx)
+
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
@@ -253,7 +251,11 @@ const renderHtmlToCanvas = async (
     element.children.forEach(child => drawText(child))
   }
 
-  elements.value.forEach(element => drawText(element))
+  elements.value.forEach(element => {
+    drawText(element)
+    // parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, ctx)
+
+  })
 }
 
 const updateCanvas = () => {

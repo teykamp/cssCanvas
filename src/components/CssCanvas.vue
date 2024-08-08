@@ -30,9 +30,8 @@ type ElementInfo = {
   element: HTMLElement,
   combinedClass: string,
   imgSrc?: string,
-  imgStyles?: CSSStyleDeclaration,
   textContent?: string,
-  testStyles?: {
+  textPosition?: {
     left: number,
     top: number,
     fontSize: string,
@@ -50,16 +49,12 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const styles = window.getComputedStyle(element)
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
-  let imgStyles: CSSStyleDeclaration | undefined = undefined
-  if (element.tagName === 'IMG') {
-    imgSrc = (element as HTMLImageElement).src
-    imgStyles = styles
-  }
+  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
   let textContent: string | undefined = undefined
-  let testStyles: ElementInfo['testStyles'] | undefined = undefined
+  let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
     textContent = element.textContent || ''
-    testStyles = {
+    textPosition = {
       left: rect.left,
       top: rect.top,
       fontSize: styles.fontSize,
@@ -69,8 +64,8 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       width: rect.width
     }
   }
+  element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  
   return { rect, children, element, imgSrc, combinedClass, textContent, textPosition }
 }
 
@@ -91,9 +86,9 @@ const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
-    
-    // sets text to invisible to redraw after
-    noTextTransformElements.forEach(element => {
+
+  // sets text to invisible to redraw after
+  noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
   })
 
@@ -127,15 +122,15 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
   } else {
     effectTags.forEach(tag => {
 
-        const effectEntry = effects.find(effect => getEffectName(effect) === tag)
+      const effectEntry = effects.find(effect => getEffectName(effect) === tag)
 
-        if (effectEntry) {
-          const { effect, args } = effectEntry
-          args ? effect(ctx, ...args) : effect(ctx)
-        } else {
-          console.warn(`No effect found for tag: ${tag}`)
-        }
+      if (effectEntry) {
+        const { effect, args } = effectEntry
+        args ? effect(ctx, ...args) : effect(ctx)
+      } else {
+        console.warn(`No effect found for tag: ${tag}`)
       }
+    }
     )
   }
 }
@@ -147,7 +142,7 @@ const combineAndApplyClassTags = (element: ElementInfo, parentClass: string = ''
   element.children.forEach(child => combineAndApplyClassTags(child, element.combinedClass))
 }
 
-const mergeLayers = (canvasToMerge: HTMLCanvasElement, mainCanvasCtx : CanvasRenderingContext2D) => {
+const mergeLayers = (canvasToMerge: HTMLCanvasElement, mainCanvasCtx: CanvasRenderingContext2D) => {
   mainCanvasCtx.drawImage(canvasToMerge, 0, 0);
 }
 
@@ -233,7 +228,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     const imgElement = imageArray[index]
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
-
     if (imgInfo) {
       const { left, top, width, height } = imgInfo.rect
 
@@ -252,9 +246,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   })
 
   const drawText = (element: ElementInfo) => {
-    if (element.textContent && element.testStyles) {
-      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.testStyles
-      console.log(color, element.textContent)
+    if (element.textContent && element.textPosition) {
+      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
       ctx.font = `${fontSize} ${fontFamily}`
       ctx.fillStyle = color === 'rgba(0, 0, 0, 0)' ? 'black' : color
       ctx.textAlign = textAlign as CanvasTextAlign
@@ -273,14 +266,11 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
         mergeLayers(tempCanvas, ctx)
       }
     }
-
     element.children.forEach(child => drawText(child))
   }
 
   elements.value.forEach(element => {
     drawText(element)
-    // parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, ctx)
-
   })
 }
 
@@ -292,7 +282,7 @@ const updateCanvas = () => {
 
     // need to edit original array here
     // then need to be able to do this for images and text (although this might be available here for text)
-    
+
 
     renderHtmlToCanvas(canvas.value, html)
   }

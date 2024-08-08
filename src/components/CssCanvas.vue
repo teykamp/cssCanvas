@@ -19,6 +19,11 @@ const { width, height } = {
   height: window.innerHeight - 20
 }
 
+const tempCanvas = document.createElement('canvas')
+tempCanvas.width = width
+tempCanvas.height = height
+
+
 type ElementInfo = {
   rect: DOMRect,
   children: ElementInfo[],
@@ -137,6 +142,10 @@ const combineAndApplyClassTags = (element: ElementInfo, parentClass: string = ''
   element.children.forEach(child => combineAndApplyClassTags(child, element.combinedClass))
 }
 
+const mergeLayers = (canvasToMerge: HTMLCanvasElement, mainCanvasCtx : CanvasRenderingContext2D) => {
+  mainCanvasCtx.drawImage(canvasToMerge, 0, 0);
+}
+
 const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
@@ -219,18 +228,21 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
 
     if (imgInfo) {
       const { left, top, width, height } = imgInfo.rect
-      ctx.drawImage(image, left, top, width, height)
-      // parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, ctx)
+
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+
+      
+      if (layerCtx) {
+        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        layerCtx.drawImage(image, left, top, width, height)
+        parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
+        mergeLayers(tempCanvas, ctx)
+      }
 
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
   })
-
-  // effects.forEach(imageEffect => {
-  //   const { effect, args } = imageEffect
-  //   args ? effect(ctx, ...args) : effect(ctx)
-  // })
 
   const drawText = (element: ElementInfo) => {
     if (element.textContent && element.textPosition) {

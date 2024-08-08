@@ -221,6 +221,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
 
   // html
   ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
+  parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
+
 
   loadedImages.slice(0, -1).forEach((image, index) => {
     const imgElement = imageArray[index]
@@ -230,9 +232,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
       const { left, top, width, height } = imgInfo.rect
 
       const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
-
-      
       if (layerCtx) {
+        // TODO: should be done in one place and not multiple
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
         layerCtx.drawImage(image, left, top, width, height)
         parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
@@ -257,8 +258,13 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
       } else if (textAlign === 'right') {
         x += width
       }
-
-      ctx.fillText(element.textContent, x, top + parseInt(fontSize))
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (layerCtx) {
+        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        ctx.fillText(element.textContent, x, top + parseInt(fontSize))
+        parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
+        mergeLayers(tempCanvas, ctx)
+      }
     }
     element.children.forEach(child => drawText(child))
   }

@@ -10,6 +10,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
+import { effects, type Effect } from '@/effects.ts'
+
 const slotContainer = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const { width, height } = {
@@ -17,10 +19,16 @@ const { width, height } = {
   height: window.innerHeight - 20
 }
 
+const tempCanvas = document.createElement('canvas')
+tempCanvas.width = width
+tempCanvas.height = height
+
+
 type ElementInfo = {
   rect: DOMRect,
   children: ElementInfo[],
   element: HTMLElement,
+  combinedClass: string,
   imgSrc?: string,
   imgStyles?: CSSStyleDeclaration,
   textContent?: string,
@@ -40,6 +48,7 @@ const elements = ref<ElementInfo[]>([])
 const getElementInfo = (element: HTMLElement): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
+  const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
   let imgStyles: CSSStyleDeclaration | undefined = undefined
   if (element.tagName === 'IMG') {
@@ -61,35 +70,10 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
     }
   }
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, imgStyles, textContent, testStyles }
+  
+  return { rect, children, element, imgSrc, combinedClass, textContent, textPosition }
 }
 
-const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
-  const convertToEmoji = (brightness: number) => {
-    return '❤'
-  }
-
-  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-  const imageCellArray = []
-  for (let y = 0; y < pixels.height; y += cellSize) {
-    for (let x = 0; x < pixels.width; x += cellSize) {
-      const pixelPosition = 4 * (pixels.width * y + x)
-      if (pixels.data[pixelPosition + 3] > 50) {
-        const [red, green, blue] = [pixels.data[pixelPosition], pixels.data[pixelPosition + 1], pixels.data[pixelPosition + 2]]
-        const brightness = (red + green + blue) / 3
-        const symbol = convertToEmoji(brightness)
-        const color = `rgb(${red}, ${green}, ${blue})`
-        imageCellArray.push({ x, y, symbol, color })
-        ctx.font = cellSize + 'px monospace'
-        ctx.fillStyle = 'rgba(200, 200, 200, 0.1)'
-        ctx.fillText(symbol, x + 1, y + 1)
-        ctx.fillStyle = color
-        ctx.fillText(symbol, x, y)
-      }
-    }
-  }
-}
 
 const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null => {
   for (let element of elements) {
@@ -107,28 +91,85 @@ const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
-
-  noTextTransformElements.forEach(element => {
+    
+    // sets text to invisible to redraw after
+    noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
   })
 
   return doc.body.innerHTML
 }
 
-const renderHtmlToCanvas = async (
-  canvas: HTMLCanvasElement,
-  html: string,
-  imageEffects: ({
-    effect: (ctx: CanvasRenderingContext2D, ...args: any[]) => void,
-    args?: any[]
-  })[],
-) => {
+const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
+
+  if (effectString.split(' ').includes('no-transform-text')) return // later will still need to run effect on element
+
+  const getEffectName = (effect: Effect): string => {
+    return effect.name || effect.effect.name
+  }
+
+  const effectTags = new Set(effectString
+    .split(' ')
+    .filter(tag => tag.startsWith('effect-'))
+    .map(tag => tag.substring('effect-'.length))
+  )
+
+  const hasEffectAll = effectTags.has('all')
+
+  if (hasEffectAll) {
+    effects.forEach(({ effect, args }) => {
+      const effectName = getEffectName({ effect, args })
+
+      if (!effectTags.has(effectName)) {
+        args ? effect(ctx, ...args) : effect(ctx)
+      }
+    })
+  } else {
+    effectTags.forEach(tag => {
+
+        const effectEntry = effects.find(effect => getEffectName(effect) === tag)
+
+        if (effectEntry) {
+          const { effect, args } = effectEntry
+          args ? effect(ctx, ...args) : effect(ctx)
+        } else {
+          console.warn(`No effect found for tag: ${tag}`)
+        }
+      }
+    )
+  }
+}
+
+const combineAndApplyClassTags = (element: ElementInfo, parentClass: string = '') => {
+  const classList = element.element.classList
+  element.combinedClass = `${parentClass} ${Array.from(classList).join(' ')}`.trim()
+
+  element.children.forEach(child => combineAndApplyClassTags(child, element.combinedClass))
+}
+
+const mergeLayers = (canvasToMerge: HTMLCanvasElement, mainCanvasCtx : CanvasRenderingContext2D) => {
+  mainCanvasCtx.drawImage(canvasToMerge, 0, 0);
+}
+
+const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
+
+  elements.value.forEach(element => {
+    combineAndApplyClassTags(element)
+  })
 
   const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
   const doc = parser.parseFromString(updatedHtml, 'text/html')
+
+  // get parent wrapper class to use for later when rendering effects fop svg
+  let parentClass = ''
+  if (doc.body.children.length === 1) {
+    const parentElement = doc.body.children[0]
+    parentClass = parentElement.className
+  }
+
   const images = doc.querySelectorAll('img')
   const imageArray = Array.from(images) as HTMLImageElement[]
 
@@ -176,46 +217,38 @@ const renderHtmlToCanvas = async (
   const loadedImages = await Promise.all(imagePromises)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // rendering happening after this comment!!
+
+  // will need to combine render functions into one with some checks. need to get order right. 
+  // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
+  // setting text to transparent and rendering it last
+
+  // html
   ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
+  parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
+
 
   loadedImages.slice(0, -1).forEach((image, index) => {
     const imgElement = imageArray[index]
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
-    if (imgInfo && imgInfo.imgStyles) {
-      const { left, top } = imgInfo.rect
-      const styles = imgInfo.imgStyles
 
-      const width = parseFloat(styles.width)
-      const height = parseFloat(styles.height)
+    if (imgInfo) {
+      const { left, top, width, height } = imgInfo.rect
 
-      const transform = styles.transform
-      const opacity = parseFloat(styles.opacity)
-
-      ctx.save()
-      if (transform) {
-        const matrix = new DOMMatrix(transform)
-        const centerX = left + width / 2
-        const centerY = top + height / 2
-
-        ctx.translate(centerX, centerY)
-        ctx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-        ctx.translate(-centerX, -centerY)
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (layerCtx) {
+        // TODO: should be done in one place and not multiple
+        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        layerCtx.drawImage(image, left, top, width, height)
+        parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
+        mergeLayers(tempCanvas, ctx)
       }
 
-      if (!isNaN(opacity)) {
-        ctx.globalAlpha = opacity
-      }
-      ctx.drawImage(image, left, top, width, height)
-      ctx.restore()
     } else {
       console.error(`Image info not found for source: ${imgElement.src}`)
     }
-  })
-
-  imageEffects.forEach(imageEffect => {
-    const { effect, args } = imageEffect
-    args ? effect(ctx, ...args) : effect(ctx)
   })
 
   const drawText = (element: ElementInfo) => {
@@ -223,7 +256,7 @@ const renderHtmlToCanvas = async (
       const { left, top, fontSize, fontFamily, color, textAlign, width } = element.testStyles
       console.log(color, element.textContent)
       ctx.font = `${fontSize} ${fontFamily}`
-      ctx.fillStyle = color
+      ctx.fillStyle = color === 'rgba(0, 0, 0, 0)' ? 'black' : color
       ctx.textAlign = textAlign as CanvasTextAlign
 
       let x = left
@@ -232,26 +265,36 @@ const renderHtmlToCanvas = async (
       } else if (textAlign === 'right') {
         x += width
       }
-
-      ctx.fillText(element.textContent, x, top + parseInt(fontSize))
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (layerCtx) {
+        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        ctx.fillText(element.textContent, x, top + parseInt(fontSize))
+        parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
+        mergeLayers(tempCanvas, ctx)
+      }
     }
 
     element.children.forEach(child => drawText(child))
   }
 
-  elements.value.forEach(element => drawText(element))
+  elements.value.forEach(element => {
+    drawText(element)
+    // parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, ctx)
+
+  })
 }
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = slotContainer.value.innerHTML
     elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
-    renderHtmlToCanvas(canvas.value, html, [
-      {
-        effect: asciiize,
-        args: [7]
-      },
-    ])
+
+
+    // need to edit original array here
+    // then need to be able to do this for images and text (although this might be available here for text)
+    
+
+    renderHtmlToCanvas(canvas.value, html)
   }
 }
 
@@ -261,5 +304,4 @@ watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
     updateCanvas()
   }
 })
-
 </script>

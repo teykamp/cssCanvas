@@ -30,8 +30,9 @@ type ElementInfo = {
   element: HTMLElement,
   combinedClass: string,
   imgSrc?: string,
+  imgStyles?: CSSStyleDeclaration,
   textContent?: string,
-  textPosition?: {
+  testStyles?: {
     left: number,
     top: number,
     fontSize: string,
@@ -49,12 +50,16 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const styles = window.getComputedStyle(element)
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
-  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  let imgStyles: CSSStyleDeclaration | undefined = undefined
+  if (element.tagName === 'IMG') {
+    imgSrc = (element as HTMLImageElement).src
+    imgStyles = styles
+  }
   let textContent: string | undefined = undefined
-  let textPosition: ElementInfo['textPosition'] | undefined = undefined
+  let testStyles: ElementInfo['testStyles'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
     textContent = element.textContent || ''
-    textPosition = {
+    testStyles = {
       left: rect.left,
       top: rect.top,
       fontSize: styles.fontSize,
@@ -64,8 +69,8 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       width: rect.width
     }
   }
-  element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
+  
   return { rect, children, element, imgSrc, combinedClass, textContent, textPosition }
 }
 
@@ -228,6 +233,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     const imgElement = imageArray[index]
     const imgInfo = findImageInfo(elements.value, imgElement.src)
 
+
     if (imgInfo) {
       const { left, top, width, height } = imgInfo.rect
 
@@ -246,8 +252,9 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   })
 
   const drawText = (element: ElementInfo) => {
-    if (element.textContent && element.textPosition) {
-      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
+    if (element.textContent && element.testStyles) {
+      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.testStyles
+      console.log(color, element.textContent)
       ctx.font = `${fontSize} ${fontFamily}`
       ctx.fillStyle = color === 'rgba(0, 0, 0, 0)' ? 'black' : color
       ctx.textAlign = textAlign as CanvasTextAlign
@@ -266,6 +273,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
         mergeLayers(tempCanvas, ctx)
       }
     }
+
     element.children.forEach(child => drawText(child))
   }
 

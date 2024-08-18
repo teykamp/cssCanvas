@@ -234,10 +234,10 @@ loadedImages.slice(0, -1).forEach((image, index) => {
   const imgInfo = findImageInfo(elements.value, imgElement.src)
 
   if (imgInfo && imgInfo.imgStyles) {
-    const { left, top } = imgInfo.rect
+    const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgInfo.rect
     const styles = imgInfo.imgStyles
-    const width = parseFloat(styles.width)
-    const height = parseFloat(styles.height)
+    const actualImageWidth = parseFloat(styles.width)
+    const actualImageHeight = parseFloat(styles.height)
     const transform = styles.transform
     const opacity = parseFloat(styles.opacity)
 
@@ -248,19 +248,20 @@ loadedImages.slice(0, -1).forEach((image, index) => {
       layerCtx.save()
       
       if (transform) {
+
+        layerCtx.translate(left + boundingBoxWidth / 2, top + boundingBoxHeight / 2)
+        
         const matrix = new DOMMatrix(transform)
-        const centerX = left + width / 2
-        const centerY = top + height / 2
-        layerCtx.translate(centerX, centerY)
         layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-        layerCtx.translate(-centerX, -centerY)
+        
+        layerCtx.translate(-(left + actualImageWidth / 2), -(top + actualImageHeight / 2))
       }
 
       if (!isNaN(opacity)) {
         layerCtx.globalAlpha = opacity
       }
 
-      layerCtx.drawImage(image, left, top, width, height)
+      layerCtx.drawImage(image, left, top, actualImageWidth, actualImageHeight)
       layerCtx.restore()
       parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
       mergeLayers(tempCanvas, ctx)
@@ -268,7 +269,7 @@ loadedImages.slice(0, -1).forEach((image, index) => {
   } else {
     console.error(`Image info not found for source: ${imgElement.src}`)
   }
-});
+})
 
 
   const drawText = (element: ElementInfo) => {

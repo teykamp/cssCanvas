@@ -30,6 +30,7 @@ type ElementInfo = {
   element: HTMLElement,
   combinedClass: string,
   imgSrc?: string,
+  imgStyles?: CSSStyleDeclaration,
   textContent?: string,
   textPosition?: {
     left: number,
@@ -49,7 +50,11 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const styles = window.getComputedStyle(element)
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
-  if (element.tagName === 'IMG') imgSrc = (element as HTMLImageElement).src
+  let imgStyles: CSSStyleDeclaration | undefined = undefined
+  if (element.tagName === 'IMG') {
+    imgSrc = (element as HTMLImageElement).src
+    imgStyles = styles
+  }
   let textContent: string | undefined = undefined
   let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
@@ -66,7 +71,7 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   }
   element.style.color = 'rgba(0, 0, 0, 0)'
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, combinedClass, textContent, textPosition }
+  return { rect, children, element, imgSrc, imgStyles, combinedClass, textContent, textPosition }
 }
 
 
@@ -224,26 +229,47 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
 
 
-  loadedImages.slice(0, -1).forEach((image, index) => {
-    const imgElement = imageArray[index]
-    const imgInfo = findImageInfo(elements.value, imgElement.src)
+loadedImages.slice(0, -1).forEach((image, index) => {
+  const imgElement = imageArray[index]
+  const imgInfo = findImageInfo(elements.value, imgElement.src)
 
-    if (imgInfo) {
-      const { left, top, width, height } = imgInfo.rect
+  if (imgInfo && imgInfo.imgStyles) {
+    const { left, top } = imgInfo.rect
+    const styles = imgInfo.imgStyles
+    const width = parseFloat(styles.width)
+    const height = parseFloat(styles.height)
+    const transform = styles.transform
+    const opacity = parseFloat(styles.opacity)
 
-      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
-      if (layerCtx) {
-        // TODO: should be done in one place and not multiple
-        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
-        layerCtx.drawImage(image, left, top, width, height)
-        parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
-        mergeLayers(tempCanvas, ctx)
+    const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+    if (layerCtx) {
+      layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+      
+      layerCtx.save()
+      
+      if (transform) {
+        const matrix = new DOMMatrix(transform)
+        const centerX = left + width / 2
+        const centerY = top + height / 2
+        layerCtx.translate(centerX, centerY)
+        layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+        layerCtx.translate(-centerX, -centerY)
       }
 
-    } else {
-      console.error(`Image info not found for source: ${imgElement.src}`)
+      if (!isNaN(opacity)) {
+        layerCtx.globalAlpha = opacity
+      }
+
+      layerCtx.drawImage(image, left, top, width, height)
+      layerCtx.restore()
+      parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
+      mergeLayers(tempCanvas, ctx)
     }
-  })
+  } else {
+    console.error(`Image info not found for source: ${imgElement.src}`)
+  }
+});
+
 
   const drawText = (element: ElementInfo) => {
     if (element.textContent && element.textPosition) {

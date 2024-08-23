@@ -82,21 +82,14 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   
   const allElements = Array.from(doc.body.getElementsByTagName("*")) as HTMLElement[]
 
-  
   allElements.forEach((el) => {
-    if (el !== element) el.style.visibility = 'hidden'
+    el.style.visibility = el.id === element.id ? 'visible' : 'hidden'
   })
-  const modifiedHtml = doc.body.innerHTML
-
-  allElements.forEach((el) => {
-    el.style.visibility = ''
-  })
-  const resetHTML = doc.body.innerHTML
-
+  const modifiedHtml = doc.body.outerHTML
   if (element.tagName !== 'IMG')
   {  
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.value!.width + 100*Math.random()}" height="${canvas.value!.height}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.value!.width}" height="${canvas.value!.height}">
         <foreignObject width="100%" height="100%">
           <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
         </foreignObject>
@@ -113,7 +106,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
     svgContent = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
   }
 
-  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement, resetHTML))
+  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement, html))
 
   return {
     rect,
@@ -144,6 +137,23 @@ const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
+
+  let idCounter = 1
+  const generateUniqueId = (baseId: string) => {
+    let newId = baseId
+    while (doc.getElementById(newId)) {
+      newId = `${baseId}-${idCounter++}`
+    }
+    return newId
+  }
+
+  // Assign unique IDs to all elements
+  doc.body.querySelectorAll('*').forEach((element) => {
+    if (!element.id) {
+      const uniqueId = generateUniqueId('element-id')
+      element.id = uniqueId
+    }
+  })
 
   // sets text to invisible to redraw after
   noTextTransformElements.forEach(element => {
@@ -401,7 +411,10 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = updateHtmlForCanvas(slotContainer.value.innerHTML)
 
-    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement, html))
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html')
+
+    elements.value = Array.from(doc.body.children).map((child) => getElementInfo(child as HTMLElement, html))
 
     // need to edit original array here
     // then need to be able to do this for images and text (although this might be available here for text)

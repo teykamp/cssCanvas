@@ -245,6 +245,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
     if (layerCtx) {
       layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+      layerCtx.resetTransform()
       layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
       mergeLayers(tempCanvas, ctx)
     }

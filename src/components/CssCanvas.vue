@@ -74,14 +74,37 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
     element.style.color = 'rgba(0, 0, 0, 0)' // Make the text transparent for the canvas render
   }
 
-  const svgContent = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-      <foreignObject x="0" y="0" width="${rect.width}" height="${rect.height}">
-        <div xmlns="http://www.w3.org/1999/xhtml" style="${styles.cssText}">${element.outerHTML}</div>
-      </foreignObject>
-    </svg>
-  `
+  let svgContent: string | undefined = undefined
+  
 
+  // const svg = `
+  // //   <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
+  // //     <foreignObject width="100%" height="100%">
+  // //       <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
+  // //     </foreignObject>
+  // //   </svg>
+  // // `
+
+  
+  if (element.tagName !== 'IMG')
+  {  svgContent = element.children.length === 0
+    ? `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
+    <foreignObject x="0" y="0" width="${rect.width}" height="${rect.height}">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+    ${element.outerHTML}
+    </div>
+    </foreignObject>
+    </svg>
+    `
+    : undefined }
+
+  // something wrong with svg generation, only generates text and doesnt understand that svg isnt generating the html as well. might
+  // need to redo the above svg generation, but not sure how
+  // innerhtml renders only text because divs are not counted, outerhtml doesnt render much stuff but svg at least shows up...
+
+    console.log(svgContent)
+  
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
 
   return {
@@ -97,10 +120,9 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   }
 }
 
-
 const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null => {
   for (let element of elements) {
-    if (element.imgSrc === src) {
+    if (element.imgSrc === src || element.svgContent === src) {
       return element
     } else if (element.children) {
       const found = findImageInfo(element.children, src)
@@ -121,7 +143,7 @@ const updateHtmlForCanvas = (html: string): string => {
   })
 
   return doc.body.innerHTML
-}
+} 
 
 const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
 
@@ -182,117 +204,165 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     combineAndApplyClassTags(element)
   })
 
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
+  const htmlAsImagePromiseList: Promise<HTMLImageElement>[] = []
 
-  // get parent wrapper class to use for later when rendering effects fop svg
-  // probably not useful after individually svg-ing each element
-  let parentClass = ''
-  if (doc.body.children.length === 1) {
-    const parentElement = doc.body.children[0]
-    parentClass = parentElement.className
-  }
+  const addHTMLElementToArrayAsSVGImage = (svgContent: string) => {
+    const utf8ToBase64 = (str: string) => {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+        return String.fromCharCode(parseInt(p1, 16))
+      }))
+    }
 
-  const images = doc.querySelectorAll('img')
-  const imageArray = Array.from(images) as HTMLImageElement[]
+    const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svgContent)}`
 
-  const imagePromises: Promise<HTMLImageElement>[] = []
-
-  imageArray.forEach((img) => {
-    const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image()
-      image.onload = () => resolve(image)
-      image.onerror = reject
-      image.src = img.src
+    const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+      const htmlImage = new Image()
+      htmlImage.onload = () => resolve(htmlImage)
+      htmlImage.onerror = (error) => {
+        console.error('Image failed to load:', error, svgContent)
+        reject(error)
+      }
+      htmlImage.src = encodedSvg
     })
 
-    imagePromises.push(imgPromise)
-
-    img.parentNode?.removeChild(img)
-  })
-
-  const modifiedHtml = doc.body.innerHTML
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-      <foreignObject width="100%" height="100%">
-        <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
-      </foreignObject>
-    </svg>
-  `
-
-  const utf8ToBase64 = (str: string) => {
-    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
-      return String.fromCharCode(parseInt(p1, 16))
-    }))
+    htmlAsImagePromiseList.push(svgPromise)
   }
 
-  const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
+  const processElement = (element: ElementInfo) => { // may want to store a flat version of all elements?
+    if (element.svgContent) addHTMLElementToArrayAsSVGImage(element.svgContent)
+    element.children.forEach(child => processElement(child))
+  }
 
-
-  const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-    const htmlImage = new Image()
-    htmlImage.onload = () => resolve(htmlImage)
-    htmlImage.onerror = reject
-    htmlImage.src = encodedSvg
+  elements.value.forEach(element => {
+    processElement(element)
   })
-  imagePromises.push(svgPromise)
-
-  const loadedImages = await Promise.all(imagePromises)
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-  // rendering happening after this comment!!
-
-  // will need to combine render functions into one with some checks. need to get order right. 
-  // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
-  // setting text to transparent and rendering it last
-
-  // html
-  ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
-  parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
 
 
-  loadedImages.slice(0, -1).forEach((image, index) => {
-    const imgElement = imageArray[index]
-    const imgInfo = findImageInfo(elements.value, imgElement.src)
+  const loadedImages = await Promise.all(htmlAsImagePromiseList)
+  
+  loadedImages.forEach(image => {
 
-    if (imgInfo && imgInfo.imgStyles) {
-      const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgInfo.rect
-      const styles = imgInfo.imgStyles
-      const actualImageWidth = parseFloat(styles.width)
-      const actualImageHeight = parseFloat(styles.height)
-      const transform = styles.transform
-      const opacity = parseFloat(styles.opacity)
-
-      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
-      if (layerCtx) {
-        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
-        
-        layerCtx.save()
-        
-        if (transform) {
-
-          layerCtx.translate(left + boundingBoxWidth / 2, top + boundingBoxHeight / 2)
-          
-          const matrix = new DOMMatrix(transform)
-          layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-          
-          layerCtx.translate(-(left + actualImageWidth / 2), -(top + actualImageHeight / 2))
-        }
-
-        if (!isNaN(opacity)) {
-          layerCtx.globalAlpha = opacity
-        }
-
-        layerCtx.drawImage(image, left, top, actualImageWidth, actualImageHeight)
-        layerCtx.restore()
-        parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
-        mergeLayers(tempCanvas, ctx)
-      }
-    } else {
-      console.error(`Image info not found for source: ${imgElement.src}`)
+    const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+    if (layerCtx) {
+      layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+      layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
+      mergeLayers(tempCanvas, ctx)
     }
   })
+
+
+
+  // const parser = new DOMParser()
+  // const doc = parser.parseFromString(html, 'text/html')
+
+  // // get parent wrapper class to use for later when rendering effects fop svg
+  // // probably not useful after individually svg-ing each element
+  // let parentClass = ''
+  // if (doc.body.children.length === 1) {
+  //   const parentElement = doc.body.children[0]
+  //   parentClass = parentElement.className
+  // }
+
+  // const images = doc.querySelectorAll('img')
+  // const imageArray = Array.from(images) as HTMLImageElement[]
+
+  // const imagePromises: Promise<HTMLImageElement>[] = []
+
+  // imageArray.forEach((img) => {
+  //   const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+  //     const image = new Image()
+  //     image.onload = () => resolve(image)
+  //     image.onerror = reject
+  //     image.src = img.src
+  //   })
+
+  //   imagePromises.push(imgPromise)
+
+  //   img.parentNode?.removeChild(img)
+  // })
+
+  // const modifiedHtml = doc.body.innerHTML
+  // const svg = `
+  //   <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
+  //     <foreignObject width="100%" height="100%">
+  //       <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
+  //     </foreignObject>
+  //   </svg>
+  // `
+
+  // const utf8ToBase64 = (str: string) => {
+  //   return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+  //     return String.fromCharCode(parseInt(p1, 16))
+  //   }))
+  // }
+
+  // const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
+
+
+  // const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+  //   const htmlImage = new Image()
+  //   htmlImage.onload = () => resolve(htmlImage)
+  //   htmlImage.onerror = reject
+  //   htmlImage.src = encodedSvg
+  // })
+  // imagePromises.push(svgPromise)
+
+  // const loadedImages = await Promise.all(imagePromises)
+
+  // ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // // rendering happening after this comment!!
+
+  // // will need to combine render functions into one with some checks. need to get order right. 
+  // // no-transform-text class should still render effects on the element, just vanish the text. currently this is done through 
+  // // setting text to transparent and rendering it last
+
+  // // html
+  // ctx.drawImage(loadedImages[loadedImages.length - 1], 0, 0, canvas.width, canvas.height)
+  // parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
+
+
+  // loadedImages.slice(0, -1).forEach((image, index) => {
+  //   const imgElement = imageArray[index]
+  //   const imgInfo = findImageInfo(elements.value, imgElement.src)
+
+  //   if (imgInfo && imgInfo.imgStyles) {
+  //     const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgInfo.rect
+  //     const styles = imgInfo.imgStyles
+  //     const actualImageWidth = parseFloat(styles.width)
+  //     const actualImageHeight = parseFloat(styles.height)
+  //     const transform = styles.transform
+  //     const opacity = parseFloat(styles.opacity)
+
+  //     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+  //     if (layerCtx) {
+  //       layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        
+  //       layerCtx.save()
+        
+  //       if (transform) {
+
+  //         layerCtx.translate(left + boundingBoxWidth / 2, top + boundingBoxHeight / 2)
+          
+  //         const matrix = new DOMMatrix(transform)
+  //         layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+          
+  //         layerCtx.translate(-(left + actualImageWidth / 2), -(top + actualImageHeight / 2))
+  //       }
+
+  //       if (!isNaN(opacity)) {
+  //         layerCtx.globalAlpha = opacity
+  //       }
+
+  //       layerCtx.drawImage(image, left, top, actualImageWidth, actualImageHeight)
+  //       layerCtx.restore()
+  //       parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
+  //       mergeLayers(tempCanvas, ctx)
+  //     }
+  //   } else {
+  //     console.error(`Image info not found for source: ${imgElement.src}`)
+  //   }
+  // })
 
 
   const drawText = (element: ElementInfo) => {
@@ -319,9 +389,10 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     element.children.forEach(child => drawText(child))
   }
 
-  elements.value.forEach(element => {
-    drawText(element)
-  })
+  // elements.value.forEach(element => {
+  //   drawText(element)
+  // })
+
 }
 
 const updateCanvas = () => {
@@ -332,7 +403,6 @@ const updateCanvas = () => {
 
     // need to edit original array here
     // then need to be able to do this for images and text (although this might be available here for text)
-
 
     renderHtmlToCanvas(canvas.value, html)
   }

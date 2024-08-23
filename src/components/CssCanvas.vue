@@ -40,7 +40,8 @@ type ElementInfo = {
     color: string,
     textAlign: string,
     width: number,
-  }
+  },
+  svgContent?: string,
 }
 
 const elements = ref<ElementInfo[]>([])
@@ -51,10 +52,12 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
   let imgStyles: CSSStyleDeclaration | undefined = undefined
+  
   if (element.tagName === 'IMG') {
     imgSrc = (element as HTMLImageElement).src
     imgStyles = styles
   }
+
   let textContent: string | undefined = undefined
   let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
@@ -68,10 +71,30 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
       textAlign: styles.textAlign,
       width: rect.width
     }
+    element.style.color = 'rgba(0, 0, 0, 0)' // Make the text transparent for the canvas render
   }
-  element.style.color = 'rgba(0, 0, 0, 0)'
+
+  const svgContent = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
+      <foreignObject x="0" y="0" width="${rect.width}" height="${rect.height}">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="${styles.cssText}">${element.outerHTML}</div>
+      </foreignObject>
+    </svg>
+  `
+
   const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
-  return { rect, children, element, imgSrc, imgStyles, combinedClass, textContent, textPosition }
+
+  return {
+    rect,
+    children,
+    element,
+    combinedClass,
+    imgSrc,
+    imgStyles,
+    textContent,
+    textPosition,
+    svgContent 
+  }
 }
 
 
@@ -159,11 +182,11 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     combineAndApplyClassTags(element)
   })
 
-  const updatedHtml = updateHtmlForCanvas(html)
   const parser = new DOMParser()
-  const doc = parser.parseFromString(updatedHtml, 'text/html')
+  const doc = parser.parseFromString(html, 'text/html')
 
   // get parent wrapper class to use for later when rendering effects fop svg
+  // probably not useful after individually svg-ing each element
   let parentClass = ''
   if (doc.body.children.length === 1) {
     const parentElement = doc.body.children[0]
@@ -229,47 +252,47 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
 
 
-loadedImages.slice(0, -1).forEach((image, index) => {
-  const imgElement = imageArray[index]
-  const imgInfo = findImageInfo(elements.value, imgElement.src)
+  loadedImages.slice(0, -1).forEach((image, index) => {
+    const imgElement = imageArray[index]
+    const imgInfo = findImageInfo(elements.value, imgElement.src)
 
-  if (imgInfo && imgInfo.imgStyles) {
-    const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgInfo.rect
-    const styles = imgInfo.imgStyles
-    const actualImageWidth = parseFloat(styles.width)
-    const actualImageHeight = parseFloat(styles.height)
-    const transform = styles.transform
-    const opacity = parseFloat(styles.opacity)
+    if (imgInfo && imgInfo.imgStyles) {
+      const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgInfo.rect
+      const styles = imgInfo.imgStyles
+      const actualImageWidth = parseFloat(styles.width)
+      const actualImageHeight = parseFloat(styles.height)
+      const transform = styles.transform
+      const opacity = parseFloat(styles.opacity)
 
-    const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
-    if (layerCtx) {
-      layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
-      
-      layerCtx.save()
-      
-      if (transform) {
-
-        layerCtx.translate(left + boundingBoxWidth / 2, top + boundingBoxHeight / 2)
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (layerCtx) {
+        layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
         
-        const matrix = new DOMMatrix(transform)
-        layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+        layerCtx.save()
         
-        layerCtx.translate(-(left + actualImageWidth / 2), -(top + actualImageHeight / 2))
-      }
+        if (transform) {
 
-      if (!isNaN(opacity)) {
-        layerCtx.globalAlpha = opacity
-      }
+          layerCtx.translate(left + boundingBoxWidth / 2, top + boundingBoxHeight / 2)
+          
+          const matrix = new DOMMatrix(transform)
+          layerCtx.transform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+          
+          layerCtx.translate(-(left + actualImageWidth / 2), -(top + actualImageHeight / 2))
+        }
 
-      layerCtx.drawImage(image, left, top, actualImageWidth, actualImageHeight)
-      layerCtx.restore()
-      parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
-      mergeLayers(tempCanvas, ctx)
+        if (!isNaN(opacity)) {
+          layerCtx.globalAlpha = opacity
+        }
+
+        layerCtx.drawImage(image, left, top, actualImageWidth, actualImageHeight)
+        layerCtx.restore()
+        parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
+        mergeLayers(tempCanvas, ctx)
+      }
+    } else {
+      console.error(`Image info not found for source: ${imgElement.src}`)
     }
-  } else {
-    console.error(`Image info not found for source: ${imgElement.src}`)
-  }
-})
+  })
 
 
   const drawText = (element: ElementInfo) => {
@@ -303,9 +326,9 @@ loadedImages.slice(0, -1).forEach((image, index) => {
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
-    const html = slotContainer.value.innerHTML
-    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
+    const html = updateHtmlForCanvas(slotContainer.value.innerHTML)
 
+    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
 
     // need to edit original array here
     // then need to be able to do this for images and text (although this might be available here for text)

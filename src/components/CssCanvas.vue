@@ -45,8 +45,9 @@ type ElementInfo = {
 }
 
 const elements = ref<ElementInfo[]>([])
+const exctractedImages = ref<Promise<HTMLImageElement>[]>([])
 
-const getElementInfo = (element: HTMLElement): ElementInfo => {
+const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   const rect = element.getBoundingClientRect()
   const styles = window.getComputedStyle(element)
   const combinedClass = element.classList.value
@@ -75,37 +76,44 @@ const getElementInfo = (element: HTMLElement): ElementInfo => {
   }
 
   let svgContent: string | undefined = undefined
-  
 
-  // const svg = `
-  // //   <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-  // //     <foreignObject width="100%" height="100%">
-  // //       <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
-  // //     </foreignObject>
-  // //   </svg>
-  // // `
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const images = doc.querySelectorAll('img')
+  const imageArray = Array.from(images) as HTMLImageElement[]
 
-  
+  imageArray.forEach((img) => {
+    img.parentNode?.removeChild(img)
+  })
+
   if (element.tagName !== 'IMG')
-  {  svgContent = element.children.length === 0
-    ? `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-    <foreignObject x="0" y="0" width="${rect.width}" height="${rect.height}">
-    <div xmlns="http://www.w3.org/1999/xhtml">
-    ${element.outerHTML}
-    </div>
-    </foreignObject>
-    </svg>
+  {  
+  
+
+    const modifiedHtml = doc.body.innerHTML
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.value!.width}" height="${canvas.value!.height}">
+        <foreignObject width="100%" height="100%">
+          <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
+        </foreignObject>
+      </svg>
     `
-    : undefined }
+
+    const utf8ToBase64 = (str: string) => {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+        return String.fromCharCode(parseInt(p1, 16))
+      }))
+    }
+
+    svgContent = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
+  }
+
 
   // something wrong with svg generation, only generates text and doesnt understand that svg isnt generating the html as well. might
   // need to redo the above svg generation, but not sure how
   // innerhtml renders only text because divs are not counted, outerhtml doesnt render much stuff but svg at least shows up...
 
-    console.log(svgContent)
-  
-  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement))
+  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement, html))
 
   return {
     rect,
@@ -140,6 +148,22 @@ const updateHtmlForCanvas = (html: string): string => {
   // sets text to invisible to redraw after
   noTextTransformElements.forEach(element => {
     element.style.color = 'rgba(0, 0, 0, 0)'
+  })
+
+  const images = doc.querySelectorAll('img')
+  const imageArray = Array.from(images) as HTMLImageElement[]
+
+  imageArray.forEach((img) => {
+    const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = reject
+      image.src = img.src
+    })
+
+    exctractedImages.value.push(imgPromise)
+
+    img.parentNode?.removeChild(img)
   })
 
   return doc.body.innerHTML
@@ -204,16 +228,20 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
     combineAndApplyClassTags(element)
   })
 
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+
+  // // get parent wrapper class to use for later when rendering effects fop svg
+  // // probably not useful after individually svg-ing each element
+  // let parentClass = ''
+  // if (doc.body.children.length === 1) {
+  //   const parentElement = doc.body.children[0]
+  //   parentClass = parentElement.className
+  // }
+
   const htmlAsImagePromiseList: Promise<HTMLImageElement>[] = []
 
   const addHTMLElementToArrayAsSVGImage = (svgContent: string) => {
-    const utf8ToBase64 = (str: string) => {
-      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
-        return String.fromCharCode(parseInt(p1, 16))
-      }))
-    }
-
-    const encodedSvg: string = `data:image/svg+xml;base64,${utf8ToBase64(svgContent)}`
 
     const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
       const htmlImage = new Image()
@@ -222,7 +250,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
         console.error('Image failed to load:', error, svgContent)
         reject(error)
       }
-      htmlImage.src = encodedSvg
+      htmlImage.src = svgContent
     })
 
     htmlAsImagePromiseList.push(svgPromise)
@@ -253,34 +281,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
 
 
 
-  // const parser = new DOMParser()
-  // const doc = parser.parseFromString(html, 'text/html')
-
-  // // get parent wrapper class to use for later when rendering effects fop svg
-  // // probably not useful after individually svg-ing each element
-  // let parentClass = ''
-  // if (doc.body.children.length === 1) {
-  //   const parentElement = doc.body.children[0]
-  //   parentClass = parentElement.className
-  // }
-
-  // const images = doc.querySelectorAll('img')
-  // const imageArray = Array.from(images) as HTMLImageElement[]
-
-  // const imagePromises: Promise<HTMLImageElement>[] = []
-
-  // imageArray.forEach((img) => {
-  //   const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-  //     const image = new Image()
-  //     image.onload = () => resolve(image)
-  //     image.onerror = reject
-  //     image.src = img.src
-  //   })
-
-  //   imagePromises.push(imgPromise)
-
-  //   img.parentNode?.removeChild(img)
-  // })
+  
 
   // const modifiedHtml = doc.body.innerHTML
   // const svg = `
@@ -400,7 +401,7 @@ const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
     const html = updateHtmlForCanvas(slotContainer.value.innerHTML)
 
-    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement))
+    elements.value = Array.from(slotContainer.value.children).map((child) => getElementInfo(child as HTMLElement, html))
 
     // need to edit original array here
     // then need to be able to do this for images and text (although this might be available here for text)

@@ -240,6 +240,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   const loadedImages = await Promise.all(imagePromises)
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.resetTransform()
+
 
   // rendering happening after this comment!!
 
@@ -267,6 +269,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
       const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
       if (layerCtx) {
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        layerCtx.resetTransform()
         
         layerCtx.save()
         
@@ -311,6 +314,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
       const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
       if (layerCtx) {
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        layerCtx.resetTransform()
+
         ctx.fillText(element.textContent, x, top + parseInt(fontSize))
         parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
         mergeLayers(tempCanvas, ctx)

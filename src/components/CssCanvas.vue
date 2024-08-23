@@ -79,26 +79,31 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
 
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
-  const images = doc.querySelectorAll('img')
-  const imageArray = Array.from(images) as HTMLImageElement[]
+  
+  const allElements = Array.from(doc.body.getElementsByTagName("*")) as HTMLElement[]
 
-  imageArray.forEach((img) => {
-    img.parentNode?.removeChild(img)
+  
+  allElements.forEach((el) => {
+    if (el !== element) el.style.visibility = 'hidden'
   })
+  const modifiedHtml = doc.body.innerHTML
+
+  allElements.forEach((el) => {
+    el.style.visibility = ''
+  })
+  const resetHTML = doc.body.innerHTML
 
   if (element.tagName !== 'IMG')
   {  
-  
-
-    const modifiedHtml = doc.body.innerHTML
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.value!.width}" height="${canvas.value!.height}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${canvas.value!.width + 100*Math.random()}" height="${canvas.value!.height}">
         <foreignObject width="100%" height="100%">
           <div xmlns="http://www.w3.org/1999/xhtml">${modifiedHtml}</div>
         </foreignObject>
       </svg>
     `
 
+    
     const utf8ToBase64 = (str: string) => {
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
         return String.fromCharCode(parseInt(p1, 16))
@@ -108,12 +113,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
     svgContent = `data:image/svg+xml;base64,${utf8ToBase64(svg)}`
   }
 
-
-  // something wrong with svg generation, only generates text and doesnt understand that svg isnt generating the html as well. might
-  // need to redo the above svg generation, but not sure how
-  // innerhtml renders only text because divs are not counted, outerhtml doesnt render much stuff but svg at least shows up...
-
-  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement, html))
+  const children = Array.from(element.children).map((child) => getElementInfo(child as HTMLElement, resetHTML))
 
   return {
     rect,

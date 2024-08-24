@@ -7,6 +7,7 @@
         <div style="display: flex;">
           <div style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute; box-shadow: 10px 10px black;">
             <div style="width: 10px; height: 10px; background-color: aqua; left: 500px; top: 50px; position: absolute;">
+              hihi
             </div>
 
           </div>

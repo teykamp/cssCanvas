@@ -46,10 +46,16 @@ type ElementInfo = {
 
 const elements = ref<ElementInfo[]>([])
 const exctractedImages = ref<Promise<HTMLImageElement>[]>([])
+const imageArray = ref<HTMLImageElement[]>([])
+const htmlToElementMap = ref<Map<string, Element | null>>(new Map())
 
 const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
-  const rect = element.getBoundingClientRect()
-  const styles = window.getComputedStyle(element)
+  const elementOnDom = htmlToElementMap.value.get(element.outerHTML)
+
+  
+  const rect = elementOnDom ? elementOnDom.getBoundingClientRect() : element.getBoundingClientRect()
+  const styles = window.getComputedStyle(elementOnDom ? elementOnDom : element)
+  console.log(styles.color)
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
   let imgStyles: CSSStyleDeclaration | undefined = undefined
@@ -62,7 +68,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   let textContent: string | undefined = undefined
   let textPosition: ElementInfo['textPosition'] | undefined = undefined
   if (element.classList.contains('no-transform-text')) {
-    textContent = element.textContent || ''
+    textContent = (elementOnDom ? elementOnDom.textContent : element.textContent) || ''
     textPosition = {
       left: rect.left,
       top: rect.top,
@@ -72,7 +78,6 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
       textAlign: styles.textAlign,
       width: rect.width
     }
-    element.style.color = 'rgba(0, 0, 0, 0)' // Make the text transparent for the canvas render
   }
 
   let svgContent: string | undefined = undefined
@@ -83,7 +88,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   const allElements = Array.from(doc.body.getElementsByTagName("*")) as HTMLElement[]
 
   allElements.forEach((el) => {
-    el.style.visibility = el.id === element.id ? 'visible' : 'hidden'
+    el.style.visibility = el.innerHTML === element.innerHTML ? 'visible' : 'hidden'
   })
   const modifiedHtml = doc.body.outerHTML
   if (element.tagName !== 'IMG')
@@ -122,7 +127,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
 }
 
 const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null => {
-  for (let element of elements) {
+  for (const element of elements) {
     if (element.imgSrc === src || element.svgContent === src) {
       return element
     } else if (element.children) {
@@ -137,33 +142,22 @@ const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   const noTextTransformElements = doc.querySelectorAll('.no-transform-text') as NodeListOf<HTMLElement>
-
-  let idCounter = 1
-  const generateUniqueId = (baseId: string) => {
-    let newId = baseId
-    while (doc.getElementById(newId)) {
-      newId = `${baseId}-${idCounter++}`
-    }
-    return newId
-  }
-
-  // Assign unique IDs to all elements
-  doc.body.querySelectorAll('*').forEach((element) => {
-    if (!element.id) {
-      const uniqueId = generateUniqueId('element-id')
-      element.id = uniqueId
-    }
-  })
-
-  // sets text to invisible to redraw after
+    
   noTextTransformElements.forEach(element => {
+    const oldHtml = element.outerHTML
+    const el = htmlToElementMap.value.get(oldHtml)
+
+    htmlToElementMap.value.delete(oldHtml)
+
     element.style.color = 'rgba(0, 0, 0, 0)'
+
+    htmlToElementMap.value.set(element.outerHTML, el || null)
   })
 
   const images = doc.querySelectorAll('img')
-  const imageArray = Array.from(images) as HTMLImageElement[]
+  imageArray.value = Array.from(images)
 
-  imageArray.forEach((img) => {
+  imageArray.value.forEach((img) => {
     const imgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
       image.onload = () => resolve(image)
@@ -179,9 +173,9 @@ const updateHtmlForCanvas = (html: string): string => {
   return doc.body.innerHTML
 } 
 
-const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D) => {
+const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D, isText: boolean = false) => {
 
-  if (effectString.split(' ').includes('no-transform-text')) return // later will still need to run effect on element
+  if (effectString.split(' ').includes('no-transform-text') && isText) return // later will still need to run effect on element
 
   const getEffectName = (effect: Effect): string => {
     return effect.name || effect.effect.name
@@ -214,8 +208,7 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
       } else {
         console.warn(`No effect found for tag: ${tag}`)
       }
-    }
-    )
+    })
   }
 }
 
@@ -237,17 +230,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   elements.value.forEach(element => {
     combineAndApplyClassTags(element)
   })
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-
-  // // get parent wrapper class to use for later when rendering effects fop svg
-  // // probably not useful after individually svg-ing each element
-  // let parentClass = ''
-  // if (doc.body.children.length === 1) {
-  //   const parentElement = doc.body.children[0]
-  //   parentClass = parentElement.className
-  // }
 
   const htmlAsImagePromiseList: Promise<HTMLImageElement>[] = []
 
@@ -276,15 +258,17 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   })
 
 
-  const loadedImages = await Promise.all(htmlAsImagePromiseList)
+  const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
   
-  loadedImages.forEach(image => {
-
+  loadedHTMLAsImages.forEach(image => {
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
-    if (layerCtx) {
+    const imgInfo = findImageInfo(elements.value, image.src)
+
+    if (layerCtx ) {
       layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
       layerCtx.resetTransform()
       layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
+      if (imgInfo) parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
       mergeLayers(tempCanvas, ctx)
     }
   })
@@ -319,7 +303,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   // })
   // imagePromises.push(svgPromise)
 
-  // const loadedImages = await Promise.all(imagePromises)
 
   // ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -334,8 +317,11 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
   // parseAndExecuteImageEffectsFromSlotElementClass(parentClass, ctx)
 
 
-  // loadedImages.slice(0, -1).forEach((image, index) => {
-  //   const imgElement = imageArray[index]
+  // const loadedImages = await Promise.all(exctractedImages.value)
+
+
+  // loadedImages.forEach((image, index) => {
+  //   const imgElement = imageArray.value[index]
   //   const imgInfo = findImageInfo(elements.value, imgElement.src)
 
   //   if (imgInfo && imgInfo.imgStyles) {
@@ -379,40 +365,60 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement, html: string) => {
 
   const drawText = (element: ElementInfo) => {
     if (element.textContent && element.textPosition) {
+      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (!layerCtx) return
       const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
-      ctx.font = `${fontSize} ${fontFamily}`
-      ctx.fillStyle = color === 'rgba(0, 0, 0, 0)' ? 'black' : color
-      ctx.textAlign = textAlign as CanvasTextAlign
-
+      layerCtx.font = `${fontSize} ${fontFamily}`
+      layerCtx.fillStyle = color ?? 'black'
+      layerCtx.textAlign = textAlign as CanvasTextAlign
       let x = left
       if (textAlign === 'center') {
         x += width / 2
       } else if (textAlign === 'right') {
         x += width
       }
-      const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
       if (layerCtx) {
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
-        ctx.fillText(element.textContent, x, top + parseInt(fontSize))
-        parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
+        layerCtx.fillText(element.textContent, x, top + parseInt(fontSize))
+        parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx, true)
         mergeLayers(tempCanvas, ctx)
       }
     }
     element.children.forEach(child => drawText(child))
   }
 
-  // elements.value.forEach(element => {
-  //   drawText(element)
-  // })
+  elements.value.forEach(element => {
+    drawText(element)
+  })
 
 }
 
+
+
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
+
+    const mapHtmlToChildren = (element: Element) => {
+      const htmlToChildMap = new Map<string, Element>()
+
+      const traverseAndMap = (el: Element) => {
+        const elHtml = el.outerHTML
+        htmlToChildMap.set(elHtml, el)
+        Array.from(el.children).forEach(traverseAndMap)
+      }
+      traverseAndMap(element)
+
+      return htmlToChildMap
+    }
+
+    htmlToElementMap.value = mapHtmlToChildren(slotContainer.value)
+
+
     const html = updateHtmlForCanvas(slotContainer.value.innerHTML)
 
-    const parser = new DOMParser();
+    const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
+
 
     elements.value = Array.from(doc.body.children).map((child) => getElementInfo(child as HTMLElement, html))
 

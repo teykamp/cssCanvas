@@ -308,6 +308,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
       const classes: string[] = []
       let parent = imgElement.parentElement
+      classes.push(...imgElement.classList)
       while (parent) {
         if (parent.classList.length > 0) {
           classes.push(...parent.classList)

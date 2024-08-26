@@ -254,7 +254,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
   elements.value.forEach(element => {
     processElement(element)
-  }
+  })
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
   

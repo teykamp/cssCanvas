@@ -254,8 +254,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
   elements.value.forEach(element => {
     processElement(element)
-  })
-
+  }
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
   
@@ -338,8 +337,11 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       }
       if (layerCtx) {
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
+        layerCtx.resetTransform()
+        
         layerCtx.fillText(element.textContent, x, top + parseInt(fontSize))
         parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx, true)
+        
         mergeLayers(tempCanvas, ctx)
       }
     }

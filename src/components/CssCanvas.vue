@@ -1,6 +1,6 @@
 <template>
   <div>
-    <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
+    <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0; padding: 0; margin: 0;"></canvas>
     <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 import { effects, type Effect } from '@/effects.ts'
 
@@ -259,12 +259,15 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
   })
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
-  
+  const loadedImages = await Promise.all(exctractedImages.value)
+
+  ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height) // clear after logic for performance
+
   loadedHTMLAsImages.forEach(image => {
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
     const imgInfo = findImageInfo(elements.value, image.src)
 
-    if (layerCtx ) {
+    if (layerCtx) {
       layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
       layerCtx.resetTransform()
       layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
@@ -272,9 +275,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       mergeLayers(tempCanvas, ctx)
     }
   })
-  
-  const loadedImages = await Promise.all(exctractedImages.value)
-
   loadedImages.forEach((image, index) => {
     const imgElement = htmlToElementMap.value.get(imageArray.value[index].outerHTML) as HTMLImageElement ?? imageArray.value[index]
     const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgElement.getBoundingClientRect()
@@ -386,6 +386,29 @@ const updateCanvas = () => {
     renderHtmlToCanvas(canvas.value)
   }
 }
+
+onMounted(() => {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+        updateCanvas()
+        console.log('Style changed:', mutation.target)
+      }
+    })
+  })
+
+  if (slotContainer.value) {
+    observer.observe(slotContainer.value, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
+  }
+
+  onBeforeUnmount(() => {
+    observer.disconnect()
+  })
+})
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
   // handles as though onMounted

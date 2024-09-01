@@ -15,7 +15,7 @@
           </div>
           <div
             style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large;"
-            class="no-transform-text">
+            class="no-transform-text effect-ascii">
             THISASDFGHJKL
           </div>
           <ul>

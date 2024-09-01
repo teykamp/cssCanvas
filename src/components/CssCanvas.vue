@@ -174,10 +174,11 @@ const updateHtmlForCanvas = (html: string): string => {
 
 const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D, isText: boolean = false) => {
 
+
   if (effectString.split(' ').includes('no-transform-text') && isText) return // later will still need to run effect on element
 
   const getEffectName = (effect: Effect): string => {
-    return effect.name || effect.effect.name
+    return effect.name ?? effect.effect.name
   }
 
   const effectTags = new Set(effectString
@@ -185,12 +186,13 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
     .filter(tag => tag.startsWith('effect-'))
     .map(tag => tag.substring('effect-'.length))
   )
-
+  
+  
   const hasEffectAll = effectTags.has('all')
-
+  
   if (hasEffectAll) {
-    effects.forEach(({ effect, args }) => {
-      const effectName = getEffectName({ effect, args })
+    effects.forEach(({ name, effect, args }) => {
+      const effectName = getEffectName({ name, effect, args })
 
       if (!effectTags.has(effectName)) {
         args ? effect(ctx, ...args) : effect(ctx)

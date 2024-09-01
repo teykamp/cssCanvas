@@ -45,7 +45,8 @@ type ElementInfo = {
 }
 
 const elements = ref<ElementInfo[]>([])
-const exctractedImages = ref<Promise<HTMLImageElement>[]>([])
+const extractedImages = ref<Promise<HTMLImageElement>[]>([])
+const loadedImages = ref<HTMLImageElement[]>([])
 const imageArray = ref<HTMLImageElement[]>([])
 const htmlToElementMap = ref<Map<string, Element | null>>(new Map())
 
@@ -136,6 +137,10 @@ const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null
   return null
 }
 
+const loadImages = async () => {
+  loadedImages.value = await Promise.all(extractedImages.value)
+}
+
 const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
@@ -164,10 +169,12 @@ const updateHtmlForCanvas = (html: string): string => {
       image.src = src?.src || img.src
     })
 
-    exctractedImages.value.push(imgPromise)
+    extractedImages.value.push(imgPromise)
 
     img.parentNode?.removeChild(img)
   })
+
+  if (initialDraw.value) loadImages()
 
   return doc.body.innerHTML
 } 
@@ -259,7 +266,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
   })
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
-  const loadedImages = await Promise.all(exctractedImages.value)
 
   ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height) // clear after logic for performance
 
@@ -275,7 +281,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       mergeLayers(tempCanvas, ctx)
     }
   })
-  loadedImages.forEach((image, index) => {
+
+  loadedImages.value.forEach((image, index) => {
     const imgElement = htmlToElementMap.value.get(imageArray.value[index].outerHTML) as HTMLImageElement ?? imageArray.value[index]
     const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgElement.getBoundingClientRect()
     const styles = imgElement.style
@@ -387,27 +394,35 @@ const updateCanvas = () => {
   }
 }
 
-onMounted(() => {
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-        updateCanvas()
-        console.log('Style changed:', mutation.target)
-      }
-    })
-  })
+const initialDraw = ref(true)
 
-  if (slotContainer.value) {
-    observer.observe(slotContainer.value, {
-      attributes: true,
-      childList: true,
-      subtree: true,
+onMounted(() => {
+  if (slotContainer.value && canvas.value) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          initialDraw.value = false
+          const mutatedElement = mutation.target as HTMLElement
+          const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
+          elements.value.push(getElementInfo(mutatedElement, html))
+          elements.value = [...new Set(elements.value)]
+          renderHtmlToCanvas(canvas.value!)          
+        }
+      })
+    })
+    if (slotContainer.value) {
+      observer.observe(slotContainer.value, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+      })
+    }
+
+    onBeforeUnmount(() => {
+      observer.disconnect()
     })
   }
 
-  onBeforeUnmount(() => {
-    observer.disconnect()
-  })
 })
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {

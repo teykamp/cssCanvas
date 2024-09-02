@@ -38,6 +38,23 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
   }
 }
 
+// const mosaic = (ctx: CanvasRenderingContext2D, cellSize: number) => {
+
+// }
+
+const greyscale = (ctx: CanvasRenderingContext2D, cellSize: number) => {
+  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  // const imageCellArray = []
+  const imageCellArray = []
+  for (let i = 0; i < pixels.data.length; i += 4){
+    const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]]
+    const avgBrightness = (red + green + blue) / 3
+    pixels.data[i] = avgBrightness
+    pixels.data[i + 1] = avgBrightness
+    pixels.data[i + 2] = avgBrightness
+  }
+}
 // /////////////////////////////////////////////////////////// //
 
 const effects: Effect[] = [
@@ -46,6 +63,11 @@ const effects: Effect[] = [
     effect: asciiize,
     args: [7]
   },
+  // {
+  //   name: 'greyscale',
+  //   effect: greyscale,
+  //   args: [7]
+  // },
 ]
 
 export type { Effect }

@@ -2,7 +2,7 @@
   <div>
     <CssCanvas>
 
-      <div>
+      <div class="effect-all">
         <div style="font-size: x-large; position: absolute; text-align: right; width: 500px;">HIHIHIHHI</div>
         <div style="display: flex;">
           <div

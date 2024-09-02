@@ -42,19 +42,18 @@ const asciiize = (ctx: CanvasRenderingContext2D, cellSize: number) => {
 
 // }
 
-const greyscale = (ctx: CanvasRenderingContext2D, cellSize: number) => {
-  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-  // const imageCellArray = []
-  const imageCellArray = []
-  for (let i = 0; i < pixels.data.length; i += 4){
-    const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]]
-    const avgBrightness = (red + green + blue) / 3
-    pixels.data[i] = avgBrightness
-    pixels.data[i + 1] = avgBrightness
-    pixels.data[i + 2] = avgBrightness
+const greyscale = (ctx: CanvasRenderingContext2D) => {
+  const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    const [red, green, blue] = [pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]];
+    const brightness = (red + green + blue) / 3;
+    pixels.data[i] = brightness; // Red
+    pixels.data[i + 1] = brightness; // Green
+    pixels.data[i + 2] = brightness; // Blue
+    // Alpha channel (pixels.data[i + 3]) remains unchanged
   }
-}
+  ctx.putImageData(pixels, 0, 0); // Put the modified image data back onto the canvas
+};
 // /////////////////////////////////////////////////////////// //
 
 const effects: Effect[] = [
@@ -63,11 +62,9 @@ const effects: Effect[] = [
     effect: asciiize,
     args: [7]
   },
-  // {
-  //   name: 'greyscale',
-  //   effect: greyscale,
-  //   args: [7]
-  // },
+  {
+    effect: greyscale
+  },
 ]
 
 export type { Effect }

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0"></canvas>
+    <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0; padding: 0; margin: 0;"></canvas>
     <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
     </div>
@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 import { effects, type Effect } from '@/effects.ts'
 
@@ -45,7 +45,8 @@ type ElementInfo = {
 }
 
 const elements = ref<ElementInfo[]>([])
-const exctractedImages = ref<Promise<HTMLImageElement>[]>([])
+const extractedImages = ref<Promise<HTMLImageElement>[]>([])
+const loadedImages = ref<HTMLImageElement[]>([])
 const imageArray = ref<HTMLImageElement[]>([])
 const htmlToElementMap = ref<Map<string, Element | null>>(new Map())
 
@@ -136,6 +137,10 @@ const findImageInfo = (elements: ElementInfo[], src: string): ElementInfo | null
   return null
 }
 
+const loadImages = async () => {
+  loadedImages.value = await Promise.all(extractedImages.value)
+}
+
 const updateHtmlForCanvas = (html: string): string => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
@@ -164,20 +169,23 @@ const updateHtmlForCanvas = (html: string): string => {
       image.src = src?.src || img.src
     })
 
-    exctractedImages.value.push(imgPromise)
+    extractedImages.value.push(imgPromise)
 
     img.parentNode?.removeChild(img)
   })
+
+  if (initialDraw.value) loadImages()
 
   return doc.body.innerHTML
 } 
 
 const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, ctx: CanvasRenderingContext2D, isText: boolean = false) => {
 
+
   if (effectString.split(' ').includes('no-transform-text') && isText) return // later will still need to run effect on element
 
   const getEffectName = (effect: Effect): string => {
-    return effect.name || effect.effect.name
+    return effect.name ?? effect.effect.name
   }
 
   const effectTags = new Set(effectString
@@ -185,12 +193,13 @@ const parseAndExecuteImageEffectsFromSlotElementClass = (effectString: string, c
     .filter(tag => tag.startsWith('effect-'))
     .map(tag => tag.substring('effect-'.length))
   )
-
+  
+  
   const hasEffectAll = effectTags.has('all')
-
+  
   if (hasEffectAll) {
-    effects.forEach(({ effect, args }) => {
-      const effectName = getEffectName({ effect, args })
+    effects.forEach(({ name, effect, args }) => {
+      const effectName = getEffectName({ name, effect, args })
 
       if (!effectTags.has(effectName)) {
         args ? effect(ctx, ...args) : effect(ctx)
@@ -257,12 +266,14 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
   })
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
-  
+
+  ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height) // clear after logic for performance
+
   loadedHTMLAsImages.forEach(image => {
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
     const imgInfo = findImageInfo(elements.value, image.src)
 
-    if (layerCtx ) {
+    if (layerCtx) {
       layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
       layerCtx.resetTransform()
       layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
@@ -270,10 +281,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       mergeLayers(tempCanvas, ctx)
     }
   })
-  
-  const loadedImages = await Promise.all(exctractedImages.value)
 
-  loadedImages.forEach((image, index) => {
+  loadedImages.value.forEach((image, index) => {
     const imgElement = htmlToElementMap.value.get(imageArray.value[index].outerHTML) as HTMLImageElement ?? imageArray.value[index]
     const { left, top, width: boundingBoxWidth, height: boundingBoxHeight } = imgElement.getBoundingClientRect()
     const styles = imgElement.style
@@ -384,6 +393,37 @@ const updateCanvas = () => {
     renderHtmlToCanvas(canvas.value)
   }
 }
+
+const initialDraw = ref(true)
+
+onMounted(() => {
+  if (slotContainer.value && canvas.value) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          initialDraw.value = false
+          const mutatedElement = mutation.target as HTMLElement
+          const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
+          elements.value.push(getElementInfo(mutatedElement, html))
+          elements.value = [...new Set(elements.value)]
+          renderHtmlToCanvas(canvas.value!)          
+        }
+      })
+    })
+    if (slotContainer.value) {
+      observer.observe(slotContainer.value, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+      })
+    }
+
+    onBeforeUnmount(() => {
+      observer.disconnect()
+    })
+  }
+
+})
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
   // handles as though onMounted

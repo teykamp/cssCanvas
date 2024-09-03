@@ -9,7 +9,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-
+import { v4 as uuidv4 } from 'uuid'
 import { effects, type Effect } from '@/effects.ts'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
@@ -366,6 +366,8 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
 
+    assignUniqueDataAttributes(slotContainer.value)
+
     const mapHtmlToChildren = (element: Element) => {
       const htmlToChildMap = new Map<string, Element>()
 
@@ -396,33 +398,38 @@ const updateCanvas = () => {
 
 const initialDraw = ref(true)
 
-onMounted(() => {
-  if (slotContainer.value && canvas.value) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-          initialDraw.value = false
-          const mutatedElement = mutation.target as HTMLElement
-          const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
-          elements.value.push(getElementInfo(mutatedElement, html))
-          elements.value = [...new Set(elements.value)]
-          renderHtmlToCanvas(canvas.value!)          
-        }
-      })
-    })
-    if (slotContainer.value) {
-      observer.observe(slotContainer.value, {
-        attributes: true,
-        childList: true,
-        subtree: true,
-      })
+const assignUniqueDataAttributes = (element: HTMLElement) => {
+  element.setAttribute('data-uuid', uuidv4())
+  Array.from(element.children).forEach((child) => assignUniqueDataAttributes(child as HTMLElement))
+}
+
+const handleMutations = (mutations: MutationRecord[]) => {
+  mutations.forEach((mutation) => {
+    if (mutation.type === 'attributes' || mutation.type === 'childList') {
+      const mutatedElement = mutation.target as HTMLElement
+      const elementUuid = mutatedElement.getAttribute('data-uuid');
+
+      if (elementUuid) {
+        console.log('Element updated with UUID:', elementUuid)
+      }
     }
+  })
+}
+
+onMounted(() => {
+  if (slotContainer.value) {
+    const observer = new MutationObserver(handleMutations)
+
+    observer.observe(slotContainer.value, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
 
     onBeforeUnmount(() => {
       observer.disconnect()
     })
   }
-
 })
 
 watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {

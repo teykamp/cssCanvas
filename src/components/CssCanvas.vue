@@ -273,7 +273,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
   loadedHTMLAsImages.forEach(image => {
 
-    const tempCanvas = document.createElement('canvas') // TODO: does not show up on dom. maybe better way in vue?
+    const tempCanvas = document.createElement('canvas')
     tempCanvas.width = width
     tempCanvas.height = height
     tempCanvas.style.position = 'absolute'
@@ -436,11 +436,47 @@ const handleMutations = (mutations: MutationRecord[]) => {
     if (mutation.type === 'attributes' || mutation.type === 'childList') {
       const mutatedElement = mutation.target as HTMLElement
       const elementUuid = mutatedElement.getAttribute('data-uuid')
-      console.log(elementUuid)
+      let parentFound = false;
+
+      const recursiveSearch = (parent: ElementInfo) => {
+        if (parent.children) {
+          for (let i = 0; i < parent.children.length; i++) {
+            const child = parent.children[i];
+
+            if (child.dataId === elementUuid) {
+              const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
+              const updatedElement = getElementInfo(mutatedElement, html)
+
+              parent.children[i] = updatedElement;
+              parentFound = true;
+              return true
+            }
+
+            if (child.children && child.children.length > 0) {
+              if (recursiveSearch(child)) {
+                return true
+              }
+            }
+          }
+        }
+        return false
+      }
+
+      for (const parent of elements.value) {
+        if (recursiveSearch(parent)) {
+          break
+        }
+      }
+
+      if (parentFound) {
+
+        // reload the current canvas with new content. this needs to have its own rendering function that you can just call giving it an element
+
+      } else {
+        console.log('Element with this ID not found')
+      }
     }
   })
-
-  // canvasContainer.value.appendChild(tempCanvas)
 }
 
 onMounted(() => {

@@ -421,6 +421,7 @@ const updateCanvas = () => {
     elements.value = Array.from(doc.body.children).map((child) => getElementInfo(child as HTMLElement, html))
 
     renderHtmlToCanvas(canvas.value)
+
   }
 }
 
@@ -431,12 +432,39 @@ const assignUniqueDataAttributes = (element: HTMLElement) => {
   Array.from(element.children).forEach((child) => assignUniqueDataAttributes(child as HTMLElement))
 }
 
+const updateElement = async (element: ElementInfo) => {
+  const tempCanvas = canvasMap.value.get(element.dataId)
+
+  const layerCtx = tempCanvas!.getContext('2d', { willReadFrequently: true })
+
+  const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const htmlImage = new Image()
+    htmlImage.onload = () => resolve(htmlImage)
+    htmlImage.onerror = (error) => {
+      console.error('Image failed to load:', error, element.svgContent)
+      reject(error)
+    }
+    htmlImage.src = element.svgContent!
+    htmlImage.id = element.svgContent!
+  })
+  const image = await svgPromise
+
+  if (layerCtx) {
+    layerCtx.clearRect(0, 0, tempCanvas!.width, tempCanvas!.height)
+    layerCtx.resetTransform()
+    layerCtx.drawImage(image, 0, 0, canvas.value!.width, canvas.value!.height)
+    if (element) parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
+  }
+}
+
 const handleMutations = (mutations: MutationRecord[]) => {
   mutations.forEach((mutation) => {
     if (mutation.type === 'attributes' || mutation.type === 'childList') {
       const mutatedElement = mutation.target as HTMLElement
       const elementUuid = mutatedElement.getAttribute('data-uuid')
-      let parentFound = false;
+      const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
+      const updatedElement = getElementInfo(mutatedElement, html)
+      let parentFound = false
 
       const recursiveSearch = (parent: ElementInfo) => {
         if (parent.children) {
@@ -444,11 +472,9 @@ const handleMutations = (mutations: MutationRecord[]) => {
             const child = parent.children[i];
 
             if (child.dataId === elementUuid) {
-              const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
-              const updatedElement = getElementInfo(mutatedElement, html)
 
-              parent.children[i] = updatedElement;
-              parentFound = true;
+              parent.children[i] = updatedElement
+              parentFound = true
               return true
             }
 
@@ -471,6 +497,8 @@ const handleMutations = (mutations: MutationRecord[]) => {
       if (parentFound) {
 
         // reload the current canvas with new content. this needs to have its own rendering function that you can just call giving it an element
+
+        updateElement(updatedElement)
 
       } else {
         console.log('Element with this ID not found')

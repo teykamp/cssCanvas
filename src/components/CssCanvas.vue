@@ -1,5 +1,6 @@
 <template>
   <div>
+    <div style="position: absolute; top: 0; left: 0;" ref="canvasAppendPosition"></div>
     <canvas ref="canvas" :width="width" :height="height" style="position: absolute; top: 0; left: 0; padding: 0; margin: 0;"></canvas>
     <div ref="slotContainer" style="opacity: 0; position: absolute; top: 0; left: 0">
       <slot></slot>
@@ -9,20 +10,19 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-
+// @ts-ignore
+import { v4 as uuidv4 } from 'uuid'
 import { effects, type Effect } from '@/effects.ts'
 
 const slotContainer = ref<HTMLDivElement | null>(null)
+const canvasAppendPosition = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const { width, height } = {
   width: window.innerWidth - 20,
   height: window.innerHeight - 20
 }
 
-const tempCanvas = document.createElement('canvas')
-tempCanvas.width = width
-tempCanvas.height = height
-
+const canvasMap = ref<Map<string, HTMLCanvasElement>>(new Map())
 
 type ElementInfo = {
   rect: DOMRect,
@@ -32,6 +32,7 @@ type ElementInfo = {
   imgSrc?: string,
   imgStyles?: CSSStyleDeclaration,
   textContent?: string,
+  dataId: string,
   textPosition?: {
     left: number,
     top: number,
@@ -52,13 +53,13 @@ const htmlToElementMap = ref<Map<string, Element | null>>(new Map())
 
 const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   const elementOnDom = htmlToElementMap.value.get(element.outerHTML)
-
+  const dataId = (elementOnDom ? elementOnDom.getAttribute('data-uuid') : element.getAttribute('data-uuid')) ?? '-1'
   const rect = elementOnDom ? elementOnDom.getBoundingClientRect() : element.getBoundingClientRect()
   const styles = window.getComputedStyle(elementOnDom ? elementOnDom : element)
   const combinedClass = element.classList.value
   let imgSrc: string | undefined = undefined
   let imgStyles: CSSStyleDeclaration | undefined = undefined
-  
+
   if (element.tagName === 'IMG') {
     imgSrc = (element as HTMLImageElement).src
     imgStyles = styles
@@ -115,6 +116,7 @@ const getElementInfo = (element: HTMLElement, html: string): ElementInfo => {
   return {
     rect,
     children,
+    dataId,
     element,
     combinedClass,
     imgSrc,
@@ -241,7 +243,7 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
   const htmlAsImagePromiseList: Promise<HTMLImageElement>[] = []
 
-  const addHTMLElementToArrayAsSVGImage = (svgContent: string) => {
+  const addHTMLElementToArrayAsSVGImage = (svgContent: string, dataId: string) => {
 
     const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
       const htmlImage = new Image()
@@ -251,13 +253,14 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
         reject(error)
       }
       htmlImage.src = svgContent
+      htmlImage.id = dataId
     })
 
     htmlAsImagePromiseList.push(svgPromise)
   }
 
   const processElement = (element: ElementInfo) => { // may want to store a flat version of all elements?
-    if (element.svgContent) addHTMLElementToArrayAsSVGImage(element.svgContent)
+    if (element.svgContent) addHTMLElementToArrayAsSVGImage(element.svgContent, element.dataId)
     element.children.forEach(child => processElement(child))
   }
 
@@ -267,9 +270,19 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
 
   const loadedHTMLAsImages = await Promise.all(htmlAsImagePromiseList)
 
-  ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height) // clear after logic for performance
 
   loadedHTMLAsImages.forEach(image => {
+
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = width
+    tempCanvas.height = height
+    tempCanvas.style.position = 'absolute'
+    tempCanvas.style.top = '0'
+    tempCanvas.style.left = '0'
+    canvasAppendPosition.value!.appendChild(tempCanvas)
+
+    canvasMap.value.set(image.id, tempCanvas)
+
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
     const imgInfo = findImageInfo(elements.value, image.src)
 
@@ -278,7 +291,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       layerCtx.resetTransform()
       layerCtx.drawImage(image, 0, 0, canvas.width, canvas.height)
       if (imgInfo) parseAndExecuteImageEffectsFromSlotElementClass(imgInfo.combinedClass, layerCtx)
-      mergeLayers(tempCanvas, ctx)
     }
   })
 
@@ -290,6 +302,16 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
     const actualImageHeight = parseFloat(styles.height)
     const transform = styles.transform
     const opacity = parseFloat(styles.opacity)
+
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = width
+    tempCanvas.height = height
+    tempCanvas.style.position = 'absolute'
+    tempCanvas.style.top = '0'
+    tempCanvas.style.left = '0'
+    canvasAppendPosition.value!.appendChild(tempCanvas)
+
+    canvasMap.value.set(image.id, tempCanvas)
 
     const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
     if (layerCtx) {
@@ -325,24 +347,33 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
       }
 
       parseAndExecuteImageEffectsFromSlotElementClass(classes.join(' '), layerCtx)
-      mergeLayers(tempCanvas, ctx)
     }
   })
 
 
   const drawText = (element: ElementInfo) => {
     if (element.textContent && element.textPosition) {
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = width
+      tempCanvas.height = height
+      tempCanvas.style.position = 'absolute'
+      tempCanvas.style.top = '0'
+      tempCanvas.style.left = '0'
+      canvasAppendPosition.value!.appendChild(tempCanvas)
+
+      canvasMap.value.set(`text-${element.dataId}`, tempCanvas)
+
       const layerCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
       if (!layerCtx) return
-      const { left, top, fontSize, fontFamily, color, textAlign, width } = element.textPosition
+      const { left, top, fontSize, fontFamily, color, textAlign, width: elementWidth } = element.textPosition
       layerCtx.font = `${fontSize} ${fontFamily}`
       layerCtx.fillStyle = color ?? 'black'
       layerCtx.textAlign = textAlign as CanvasTextAlign
       let x = left
       if (textAlign === 'center') {
-        x += width / 2
+        x += elementWidth / 2
       } else if (textAlign === 'right') {
-        x += width
+        x += elementWidth
       }
       if (layerCtx) {
         layerCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height)
@@ -350,8 +381,6 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
         
         layerCtx.fillText(element.textContent, x, top + parseInt(fontSize))
         parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx, true)
-        
-        mergeLayers(tempCanvas, ctx)
       }
     }
     element.children.forEach(child => drawText(child))
@@ -360,11 +389,12 @@ const renderHtmlToCanvas = async (canvas: HTMLCanvasElement) => {
   elements.value.forEach(element => {
     drawText(element)
   })
-
 }
 
 const updateCanvas = () => {
   if (slotContainer.value && canvas.value) {
+
+    assignUniqueDataAttributes(slotContainer.value)
 
     const mapHtmlToChildren = (element: Element) => {
       const htmlToChildMap = new Map<string, Element>()
@@ -391,44 +421,118 @@ const updateCanvas = () => {
     elements.value = Array.from(doc.body.children).map((child) => getElementInfo(child as HTMLElement, html))
 
     renderHtmlToCanvas(canvas.value)
+
   }
 }
 
 const initialDraw = ref(true)
 
-onMounted(() => {
-  if (slotContainer.value && canvas.value) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-          initialDraw.value = false
-          const mutatedElement = mutation.target as HTMLElement
-          const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
-          elements.value.push(getElementInfo(mutatedElement, html))
-          elements.value = [...new Set(elements.value)]
-          renderHtmlToCanvas(canvas.value!)          
-        }
-      })
-    })
-    if (slotContainer.value) {
-      observer.observe(slotContainer.value, {
-        attributes: true,
-        childList: true,
-        subtree: true,
-      })
+const assignUniqueDataAttributes = (element: HTMLElement) => {
+  element.setAttribute('data-uuid', uuidv4())
+  Array.from(element.children).forEach((child) => assignUniqueDataAttributes(child as HTMLElement))
+}
+
+const updateElement = async (element: ElementInfo) => {
+  const tempCanvas = canvasMap.value.get(element.dataId)
+
+  const layerCtx = tempCanvas!.getContext('2d', { willReadFrequently: true })
+
+  const svgPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const htmlImage = new Image()
+    htmlImage.onload = () => resolve(htmlImage)
+    htmlImage.onerror = (error) => {
+      console.error('Image failed to load:', error, element.svgContent)
+      reject(error)
     }
+    htmlImage.src = element.svgContent!
+    htmlImage.id = element.svgContent!
+  })
+  const image = await svgPromise
+
+  if (layerCtx) {
+    layerCtx.clearRect(0, 0, tempCanvas!.width, tempCanvas!.height)
+    layerCtx.resetTransform()
+    layerCtx.drawImage(image, 0, 0, canvas.value!.width, canvas.value!.height)
+    if (element) parseAndExecuteImageEffectsFromSlotElementClass(element.combinedClass, layerCtx)
+  }
+}
+
+const handleMutations = (mutations: MutationRecord[]) => {
+  mutations.forEach((mutation) => {
+    if (mutation.type === 'attributes' || mutation.type === 'childList') {
+      const mutatedElement = mutation.target as HTMLElement
+      const elementUuid = mutatedElement.getAttribute('data-uuid')
+      const html = updateHtmlForCanvas(slotContainer.value!.innerHTML)
+      const updatedElement = getElementInfo(mutatedElement, html)
+      let parentFound = false
+
+      const recursiveSearch = (parent: ElementInfo) => {
+        if (parent.children) {
+          for (let i = 0; i < parent.children.length; i++) {
+            const child = parent.children[i];
+
+            if (child.dataId === elementUuid) {
+
+              parent.children[i] = updatedElement
+              parentFound = true
+              return true
+            }
+
+            if (child.children && child.children.length > 0) {
+              if (recursiveSearch(child)) {
+                return true
+              }
+            }
+          }
+        }
+        return false
+      }
+
+      for (const parent of elements.value) {
+        if (recursiveSearch(parent)) {
+          break
+        }
+      }
+
+      if (parentFound) {
+
+        // reload the current canvas with new content. this needs to have its own rendering function that you can just call giving it an element
+
+        updateElement(updatedElement)
+
+      } else {
+        console.log('Element with this ID not found')
+      }
+    }
+  })
+}
+
+onMounted(() => {
+  if (slotContainer.value) {
+
+    updateCanvas()
+
+    const observer = new MutationObserver(handleMutations)
+
+    observer.observe(slotContainer.value, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
 
     onBeforeUnmount(() => {
       observer.disconnect()
     })
   }
-
 })
 
-watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
-  // handles as though onMounted
-  if (newVal !== oldVal) {
-    updateCanvas()
-  }
-})
+// watch(() => slotContainer.value?.innerHTML, (newVal, oldVal) => {
+//   // handles as though onMounted
+//   if (newVal !== oldVal) {
+//     updateCanvas()
+
+//   }
+// })
+
+// TODO: rewrite code so elements array has all data properties and promises in it instead of doing it later. each element should know if it needs transforms or not and how to render itself so it can call the right function for when it needs to call updater function when it changes.
 </script>

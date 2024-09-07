@@ -6,6 +6,7 @@
         <div style="font-size: x-large; position: absolute; text-align: right; width: 500px;">HIHIHIHHI</div>
         <div style="display: flex;">
           <div
+            id='hi'
             style="left: 50px; top: 50px; width: 100px; height: 100px; background-color: red; position: absolute; box-shadow: 10px 10px black;"
             >
             <div style="width: 10px; height: 10px; background-color: aqua; left: 500px; top: 50px; position: absolute;">
@@ -14,7 +15,7 @@
 
           </div>
           <div
-            style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large;"
+            style="left: 790px; top: 200px; width: 500px; height: 500px; background-color: green; border-radius: 50%; cursor: pointer; position: absolute; border: 25px dashed red; font-size: xx-large; transform: skew(10deg)"
             class="no-transform-text">
             THISASDFGHJKL
           </div>
